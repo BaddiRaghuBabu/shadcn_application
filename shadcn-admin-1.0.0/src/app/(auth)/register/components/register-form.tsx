@@ -1,13 +1,17 @@
-"use client"
+/* components/register-form.tsx */
+"use client";
 
-import { HTMLAttributes, useState } from "react"
-import { z } from "zod"
-import { useForm } from "react-hook-form"
-import { IconBrandFacebook, IconBrandGithub } from "@tabler/icons-react"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { nofitySubmittedValues } from "@/lib/notify-submitted-values"
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
+import { useState, HTMLAttributes } from "react";
+import { useRouter } from "next/navigation";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
+
+import { supabase } from "@/lib/supabaseClient";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
@@ -15,10 +19,11 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from "@/components/ui/form"
-import { Input } from "@/components/ui/input"
-import { PasswordInput } from "@/components/password-input"
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/password-input";
 
+/* ---------- validation ---------- */
 const formSchema = z
   .object({
     email: z
@@ -27,123 +32,119 @@ const formSchema = z
       .email({ message: "Invalid email address" }),
     password: z
       .string()
-      .min(1, {
-        message: "Please enter your password",
-      })
-      .min(7, {
-        message: "Password must be at least 7 characters long",
-      }),
+      .min(7, { message: "Password must be at least 7 characters long" }),
     confirmPassword: z.string(),
   })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: "Passwords don't match.",
+  .refine((d) => d.password === d.confirmPassword, {
+    message: "Passwords don't match",
     path: ["confirmPassword"],
-  })
+  });
 
+type FormValues = z.infer<typeof formSchema>;
+
+/* ---------- component ---------- */
 export function RegisterForm({
   className,
   ...props
 }: HTMLAttributes<HTMLDivElement>) {
-  const [isLoading, setIsLoading] = useState(false)
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
 
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
-      email: "",
-      password: "",
-      confirmPassword: "",
-    },
-  })
+    defaultValues: { email: "", password: "", confirmPassword: "" },
+  });
 
-  function onSubmit(data: z.infer<typeof formSchema>) {
-    setIsLoading(true)
-    nofitySubmittedValues(data)
+  /* ---------- submit ---------- */
+  async function onSubmit(values: FormValues) {
+    setLoading(true);
 
-    setTimeout(() => {
-      setIsLoading(false)
-    }, 3000)
+    const { data, error } = await supabase.auth.signUp({
+      email: values.email,
+      password: values.password,
+    });
+
+    // ---- Hard error (network, bad password, etc.)
+    if (error) {
+      toast.error(error.message);
+      setLoading(false);
+      return;
+    }
+
+    // ---- No error, but got NO session  => duplicate or un‑verified
+    if (!data.session) {
+      toast.info(
+        "That email may already be registered. If you’ve verified it, please log in."
+      );
+      setTimeout(() => router.push("/login"), 1000);
+      return; // keep spinner for 1 s
+    }
+
+    // ---- Fresh sign‑up (email confirmations OFF)
+    toast.success("Account created! You’re logged in.");
+    router.push("/dashboard");
   }
 
+  /* ---------- JSX ---------- */
   return (
     <div className={cn("grid gap-6", className)} {...props}>
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)}>
-          <div className="grid gap-2">
-            <FormField
-              control={form.control}
-              name="email"
-              render={({ field }) => (
-                <FormItem className="space-y-1">
-                  <FormLabel>Email</FormLabel>
-                  <FormControl>
-                    <Input placeholder="name@example.com" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="password"
-              render={({ field }) => (
-                <FormItem className="space-y-1">
-                  <FormLabel>Password</FormLabel>
-                  <FormControl>
-                    <PasswordInput placeholder="********" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="confirmPassword"
-              render={({ field }) => (
-                <FormItem className="space-y-1">
-                  <FormLabel>Confirm Password</FormLabel>
-                  <FormControl>
-                    <PasswordInput placeholder="********" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <Button className="mt-2" disabled={isLoading}>
-              Create Account
-            </Button>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4">
+          {/* Email */}
+          <FormField
+            control={form.control}
+            name="email"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Email</FormLabel>
+                <FormControl>
+                  <Input placeholder="name@example.com" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-            <div className="relative my-2">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background text-muted-foreground px-2">
-                  Or continue with
-                </span>
-              </div>
-            </div>
+          {/* Password */}
+          <FormField
+            control={form.control}
+            name="password"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Password</FormLabel>
+                <FormControl>
+                  <PasswordInput placeholder="********" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                className="w-full"
-                type="button"
-                disabled={isLoading}
-              >
-                <IconBrandGithub className="h-4 w-4" /> GitHub
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full"
-                type="button"
-                disabled={isLoading}
-              >
-                <IconBrandFacebook className="h-4 w-4" /> Facebook
-              </Button>
-            </div>
-          </div>
+          {/* Confirm */}
+          <FormField
+            control={form.control}
+            name="confirmPassword"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Confirm Password</FormLabel>
+                <FormControl>
+                  <PasswordInput placeholder="********" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* Submit */}
+          <Button type="submit" disabled={loading}>
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              "Create Account"
+            )}
+          </Button>
         </form>
       </Form>
     </div>
-  )
+  );
 }

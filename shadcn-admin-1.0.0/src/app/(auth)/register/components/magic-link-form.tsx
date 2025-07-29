@@ -1,6 +1,7 @@
+/* components/magic-link-form.tsx */
 "use client";
 
-import { useState, HTMLAttributes } from "react";
+import { HTMLAttributes, useState } from "react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -20,7 +21,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 
-/* ---------- validation ---------- */
+/* ------------- validation ------------- */
 const schema = z.object({
   email: z
     .string()
@@ -28,7 +29,8 @@ const schema = z.object({
     .email({ message: "Invalid email address" }),
 });
 
-export function ForgotPasswordForm({
+/* ------------- component ------------- */
+export function MagicLinkForm({
   className,
   ...props
 }: HTMLAttributes<HTMLDivElement>) {
@@ -39,27 +41,33 @@ export function ForgotPasswordForm({
     defaultValues: { email: "" },
   });
 
-  /* ---------- submit ---------- */
+  /* ------------- submit ------------- */
   async function onSubmit(values: z.infer<typeof schema>) {
     setLoading(true);
 
-    const { error } = await supabase.auth.resetPasswordForEmail(
-      values.email,
-      {
-        // 👇 Supabase will send users here after they click the e‑mail link
-        redirectTo: `${location.origin}/reset-password`,
-      }
-    );
+    /**
+     * When the user clicks the magic link, Supabase will POST the
+     * access token to <origin>/dashboard?code=...  (because we set
+     * emailRedirectTo below).  Handle the token in that page or in
+     * middleware and then show the dashboard content.
+     */
+    const { error } = await supabase.auth.signInWithOtp({
+      email: values.email,
+      options: {
+        // 👇 always points to /dashboard
+        emailRedirectTo: `${location.origin}/dashboard`,
+      },
+    });
 
     if (error) {
       toast.error(error.message);
     } else {
-      toast.success("Password‑reset link sent! Check your inbox.");
+      toast.success("Magic link sent! Check your inbox.");
     }
     setLoading(false);
   }
 
-  /* ---------- render ---------- */
+  /* ------------- render ------------- */
   return (
     <div className={cn("grid gap-6", className)} {...props}>
       <Form {...form}>
@@ -82,7 +90,7 @@ export function ForgotPasswordForm({
             {loading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              "Send Reset Link"
+              "Send Magic Link"
             )}
           </Button>
         </form>

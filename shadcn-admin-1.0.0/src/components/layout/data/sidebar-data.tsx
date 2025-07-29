@@ -59,14 +59,7 @@ export const sidebarData: SidebarData = {
               title: "Dashboard 1",
               url: "/",
             },
-            {
-              title: "Dashboard 2",
-              url: "/dashboard-2",
-            },
-            {
-              title: "Dashboard 3",
-              url: "/dashboard-3",
-            },
+
           ],
         },
         {
@@ -88,18 +81,7 @@ export const sidebarData: SidebarData = {
           title: "Auth",
           icon: IconLockAccess,
           items: [
-            {
-              title: "Login",
-              url: "/login",
-            },
-            {
-              title: "Register",
-              url: "/register",
-            },
-            {
-              title: "Forgot Password",
-              url: "/forgot-password",
-            },
+
           ],
         },
         {

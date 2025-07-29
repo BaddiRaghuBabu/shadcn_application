@@ -6,9 +6,9 @@ import {
 } from "@tabler/icons-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Header } from "@/components/layout/header"
-import Dashboard1Actions from "../dashboard/components/dashboard-1-actions"
-import Overview from "../dashboard/boards/overview"
-import Analytics from "../dashboard/boards/analytics"
+import Analytics from "./boards/analytics"
+import Overview from "./boards/overview"
+import Dashboard1Actions from "./components/dashboard-1-actions"
 
 export default async function Dashboard1Page() {
   return (
