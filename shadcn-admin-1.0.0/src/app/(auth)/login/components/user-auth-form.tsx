@@ -1,3 +1,10 @@
+/* components/login-form.tsx
+   Password login  +  Email-OTP login
+   Scenarios:
+     1. User not found  → redirect to /register
+     2. Login success  → toast “Welcome back, <name|email>”
+     3. Email not verified → resend OTP & go to OTP flow
+------------------------------------------------------------------*/
 "use client";
 
 import { HTMLAttributes, useState } from "react";
@@ -22,91 +29,175 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/password-input";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
 
 /* ---------- validation ---------- */
-const formSchema = z.object({
-  email: z
-    .string()
-    .min(1, { message: "Please enter your email" })
-    .email({ message: "Invalid email address" }),
-  password: z
-    .string()
-    .min(1, { message: "Please enter your password" })
-    .min(7, { message: "Password must be at least 7 characters long" }),
+const pwdSchema = z.object({
+  email: z.string().email().min(1, "Email required"),
+  password: z.string().min(1, "Password required"),
+});
+const emailSchema = z.object({
+  email: z.string().email().min(1, "Email required"),
+});
+const otpSchema = z.object({
+  code: z.string().length(6, "6-digit code").regex(/^\d+$/, "Digits only"),
 });
 
-export function UserAuthForm({
+type PwdVals = z.infer<typeof pwdSchema>;
+type EmailVals = z.infer<typeof emailSchema>;
+type OtpVals = z.infer<typeof otpSchema>;
+
+type Stage =
+  | "login"
+  | "emailOtp"
+  | "preOtpLoader"
+  | "otp"
+  | "postOtpLoader";
+
+/* ---------- helpers -------------------------------------------- */
+function isUserNotFoundErr(msg: string) {
+  return /(user).*(not|no).*found/i.test(msg) ||
+         /invalid login credentials/i.test(msg); // newest wording
+}
+function isEmailNotVerifiedErr(msg: string) {
+  return /(email).*(not|un).*confirm|verify/i.test(msg);
+}
+
+export function LoginForm({
   className,
   ...props
 }: HTMLAttributes<HTMLDivElement>) {
+  const [stage, setStage] = useState<Stage>("login");
+  const [busy, setBusy] = useState<"pwd" | "send" | "verify" | null>(null);
+  const [savedEmail, setSavedEmail] = useState("");
   const router = useRouter();
-  const [authLoading, setAuthLoading]   = useState(false);
-  const [magicLoading, setMagicLoading] = useState(false);
 
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
+  /* forms */
+  const pwdForm = useForm<PwdVals>({
+    resolver: zodResolver(pwdSchema),
     defaultValues: { email: "", password: "" },
   });
+  const emailForm = useForm<EmailVals>({
+    resolver: zodResolver(emailSchema),
+    defaultValues: { email: "" },
+  });
+  const otpForm = useForm<OtpVals>({
+    resolver: zodResolver(otpSchema),
+    defaultValues: { code: "" },
+  });
 
-  /* ----- Email + Password login ----- */
-  async function onSubmit(values: z.infer<typeof formSchema>) {
-    setAuthLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({
-      email: values.email,
-      password: values.password,
-    });
-    setAuthLoading(false);
-
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-
-    toast.success("Logged in successfully!");
-    router.push("/dashboard");
+  /* ---------- stage helpers ------------------------------------ */
+  function showPreOtpLoader(email: string) {
+    setStage("preOtpLoader");
+    setTimeout(() => {
+      setSavedEmail(email);
+      setStage("otp");
+    }, 1000);
+  }
+  function showPostLoaderThenRedirect() {
+    setStage("postOtpLoader");
+    setTimeout(() => router.push("/dashboard"), 1000);
   }
 
-  /* ----- Magic‑link login ----- */
-  async function handleMagicLink() {
-    const email = form.getValues("email");
+  /* ---------- password login ----------------------------------- */
+  async function loginWithPassword(values: PwdVals) {
+    setBusy("pwd");
+    const { data, error } = await supabase.auth.signInWithPassword(values);
+    setBusy(null);
 
-    if (!email) {
-      form.setError("email", { message: "Please enter your email first" });
-      return;
+    if (error) {
+      /* 1️⃣  user not registered → redirect to /register */
+      if (isUserNotFoundErr(error.message)) {
+        toast.warning("User not found. Redirecting to sign-up…");
+        router.push("/register");
+        return;
+      }
+
+      /* 2️⃣  email exists but not verified → resend code & OTP flow */
+      if (isEmailNotVerifiedErr(error.message)) {
+        toast.warning(
+          "E-mail not verified. We’ve sent you a new verification code."
+        );
+        await sendOtp({ email: values.email });
+        return;
+      }
+
+      /* fallback */
+      return toast.error(error.message);
     }
 
-    setMagicLoading(true);
+    /* 🎉 login success */
+    const user = data?.user;
+    const display =
+      user?.user_metadata?.full_name?.trim() || user?.email || "there";
+    toast.success(`Welcome back, ${display}!`);
+    showPostLoaderThenRedirect();
+  }
+
+  /* ---------- send OTP ----------------------------------------- */
+  async function sendOtp(values: EmailVals) {
+    setBusy("send");
+
     const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        /** 👇 When the user clicks the link they will land here.  
-         *  Supabase JS will auto‑exchange the token for a session;
-         *  your /dashboard page/layout can then read that session.
-         */
-        emailRedirectTo: `${window.location.origin}/dashboard`,
-      },
+      email: values.email,
     });
-    setMagicLoading(false);
+
+    setBusy(null);
 
     if (error) {
-      toast.error(error.message);
-    } else {
-      toast.success("Magic link sent! Check your inbox.");
+      if (isUserNotFoundErr(error.message)) {
+        toast.warning("User not found. Redirecting to sign-up…");
+        router.push("/register");
+        return;
+      }
+      return toast.error(error.message);
     }
+
+    toast.success("Verification code sent! Check your inbox.");
+    showPreOtpLoader(values.email);
   }
 
-  /* ---------- render ---------- */
+  /* ---------- verify OTP --------------------------------------- */
+  async function verifyOtp(values: OtpVals) {
+    setBusy("verify");
+    const { data, error } = await supabase.auth.verifyOtp({
+      email: savedEmail,
+      token: values.code,
+      type: "email",
+    });
+    setBusy(null);
+
+    if (error) return toast.error(error.message);
+
+    /* success toast */
+    const display =
+      data.user?.user_metadata?.full_name?.trim() ||
+      data.user?.email ||
+      "there";
+    toast.success(`Welcome back, ${display}!`);
+    showPostLoaderThenRedirect();
+  }
+
+  /* ---------- UI (unchanged except for toasts) ------------------ */
   return (
     <div className={cn("grid gap-6", className)} {...props}>
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)}>
-          <div className="grid gap-2">
+      {/* STEP 1 — email + password */}
+      {stage === "login" && (
+        <Form {...pwdForm}>
+          <form
+            onSubmit={pwdForm.handleSubmit(loginWithPassword)}
+            className="grid gap-4"
+          >
             {/* Email */}
             <FormField
-              control={form.control}
+              control={pwdForm.control}
               name="email"
               render={({ field }) => (
-                <FormItem className="space-y-1">
+                <FormItem>
                   <FormLabel>Email</FormLabel>
                   <FormControl>
                     <Input placeholder="name@example.com" {...field} />
@@ -118,17 +209,17 @@ export function UserAuthForm({
 
             {/* Password */}
             <FormField
-              control={form.control}
+              control={pwdForm.control}
               name="password"
               render={({ field }) => (
-                <FormItem className="space-y-1">
+                <FormItem>
                   <div className="flex items-center justify-between">
                     <FormLabel>Password</FormLabel>
                     <Link
                       href="/forgot-password"
-                      className="text-muted-foreground text-sm font-medium hover:opacity-75"
+                      className="text-sm text-muted-foreground hover:opacity-75"
                     >
-                      Forgot password?
+                      Forgot Password?
                     </Link>
                   </div>
                   <FormControl>
@@ -139,12 +230,11 @@ export function UserAuthForm({
               )}
             />
 
-            {/* Login button */}
-            <Button className="mt-2" disabled={authLoading}>
-              {authLoading && (
+            <Button type="submit" disabled={busy === "pwd"}>
+              {busy === "pwd" && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-              Login
+              Log in
             </Button>
 
             {/* Divider */}
@@ -154,27 +244,144 @@ export function UserAuthForm({
               </div>
               <div className="relative flex justify-center text-xs uppercase">
                 <span className="bg-background text-muted-foreground px-2">
-                  Or continue with
+                  or
                 </span>
               </div>
             </div>
 
-            {/* Magic‑link button */}
             <Button
               variant="outline"
-              className="w-full"
               type="button"
-              disabled={magicLoading}
-              onClick={handleMagicLink}
+              className="w-full"
+              onClick={() => setStage("emailOtp")}
             >
-              {magicLoading && (
+              Magic Code (Email OTP)
+            </Button>
+
+            <p className="text-sm text-center text-muted-foreground">
+              No account?{" "}
+              <Link href="/register" className="underline">
+                Sign up
+              </Link>
+            </p>
+          </form>
+        </Form>
+      )}
+
+      {/* STEP 2 — email for OTP */}
+      {stage === "emailOtp" && (
+        <Form {...emailForm}>
+          <form
+            onSubmit={emailForm.handleSubmit(sendOtp)}
+            className="grid gap-4"
+          >
+            <FormField
+              control={emailForm.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Your email</FormLabel>
+                  <FormControl>
+                    <Input placeholder="name@example.com" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <Button type="submit" disabled={busy === "send"}>
+              {busy === "send" && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-              Magic Link
+              Send Code
             </Button>
-          </div>
-        </form>
-      </Form>
+
+            <Button
+              variant="link"
+              type="button"
+              className="justify-start p-0 text-sm"
+              disabled={busy !== null}
+              onClick={() => setStage("login")}
+            >
+              ← Back to password login
+            </Button>
+          </form>
+        </Form>
+      )}
+
+      {/* STEP 2½ — loader */}
+      {stage === "preOtpLoader" && (
+        <div className="flex flex-col items-center justify-center py-24">
+          <Loader2 className="h-20 w-20 animate-spin text-primary" />
+          <p className="mt-6 text-sm text-muted-foreground">
+            Preparing verification …
+          </p>
+        </div>
+      )}
+
+      {/* STEP 3 — OTP input */}
+      {stage === "otp" && (
+        <Form {...otpForm}>
+          <form
+            onSubmit={otpForm.handleSubmit(verifyOtp)}
+            className="grid gap-4"
+          >
+            <p className="text-sm text-muted-foreground">
+              Enter the 6-digit code sent to <strong>{savedEmail}</strong>
+            </p>
+
+            <FormField
+              control={otpForm.control}
+              name="code"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Code</FormLabel>
+                  <FormControl>
+                    <InputOTP maxLength={6} {...field}>
+                      <InputOTPGroup>
+                        {[...Array(6)].map((_, i) => (
+                          <InputOTPSlot key={i} index={i} />
+                        ))}
+                      </InputOTPGroup>
+                    </InputOTP>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <Button type="submit" disabled={busy === "verify"}>
+              {busy === "verify" && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Verify & Continue
+            </Button>
+
+            <Button
+              variant="link"
+              type="button"
+              className="justify-start p-0 text-sm"
+              disabled={busy === "send"}
+              onClick={() => {
+                emailForm.setValue("email", savedEmail);
+                sendOtp({ email: savedEmail });
+              }}
+            >
+              Resend code
+            </Button>
+          </form>
+        </Form>
+      )}
+
+      {/* STEP 4 — post-login loader */}
+      {stage === "postOtpLoader" && (
+        <div className="flex flex-col items-center justify-center py-24">
+          <Loader2 className="h-20 w-20 animate-spin text-primary" />
+          <p className="mt-6 text-sm text-muted-foreground">
+            Redirecting to your dashboard …
+          </p>
+        </div>
+      )}
     </div>
   );
 }

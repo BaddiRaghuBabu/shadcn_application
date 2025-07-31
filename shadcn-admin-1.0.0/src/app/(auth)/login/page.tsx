@@ -1,5 +1,5 @@
 import { Card } from "@/components/ui/card"
-import { UserAuthForm } from "./components/user-auth-form"
+import { LoginForm } from "./components/user-auth-form"
 
 export default function LoginPage() {
   return (
@@ -11,7 +11,7 @@ export default function LoginPage() {
           to log into your account
         </p>
       </div>
-      <UserAuthForm />
+      <LoginForm />
       <p className="text-muted-foreground mt-4 px-8 text-center text-sm">
         By clicking login, you agree to our{" "}
         <a
