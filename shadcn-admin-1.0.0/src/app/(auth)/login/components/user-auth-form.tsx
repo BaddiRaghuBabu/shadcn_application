@@ -1,9 +1,9 @@
 /* components/login-form.tsx
-   Password login  +  Email-OTP login
-   Scenarios:
-     1. User not found  → redirect to /register
-     2. Login success  → toast “Welcome back, <name|email>”
-     3. Email not verified → resend OTP & go to OTP flow
+   Password login + Email-OTP login
+   Behaviour:
+     • <email> not found  → toast “…not found. Please sign-up.” → push /register
+     • E-mail not verified → resend OTP & show OTP screen
+     • Success            → “Welcome back, <name|email>”
 ------------------------------------------------------------------*/
 "use client";
 
@@ -59,13 +59,12 @@ type Stage =
   | "postOtpLoader";
 
 /* ---------- helpers -------------------------------------------- */
-function isUserNotFoundErr(msg: string) {
-  return /(user).*(not|no).*found/i.test(msg) ||
-         /invalid login credentials/i.test(msg); // newest wording
-}
-function isEmailNotVerifiedErr(msg: string) {
-  return /(email).*(not|un).*confirm|verify/i.test(msg);
-}
+const isUserNotFoundErr = (msg: string) =>
+  /(user).*(not|no).*found/i.test(msg) ||
+  /invalid login credentials/i.test(msg);
+
+const isEmailNotVerifiedErr = (msg: string) =>
+  /(email).*(not|un).*confirm|verify/i.test(msg);
 
 export function LoginForm({
   className,
@@ -91,33 +90,31 @@ export function LoginForm({
   });
 
   /* ---------- stage helpers ------------------------------------ */
-  function showPreOtpLoader(email: string) {
+  const showPreOtpLoader = (email: string) => {
     setStage("preOtpLoader");
     setTimeout(() => {
       setSavedEmail(email);
       setStage("otp");
     }, 1000);
-  }
-  function showPostLoaderThenRedirect() {
+  };
+
+  const showPostLoaderThenRedirect = () => {
     setStage("postOtpLoader");
     setTimeout(() => router.push("/dashboard"), 1000);
-  }
+  };
 
   /* ---------- password login ----------------------------------- */
-  async function loginWithPassword(values: PwdVals) {
+  const loginWithPassword = async (values: PwdVals) => {
     setBusy("pwd");
     const { data, error } = await supabase.auth.signInWithPassword(values);
     setBusy(null);
 
     if (error) {
-      /* 1️⃣  user not registered → redirect to /register */
       if (isUserNotFoundErr(error.message)) {
-        toast.warning("User not found. Redirecting to sign-up…");
+        toast.warning(`${values.email} not found. Please sign-up.`);
         router.push("/register");
         return;
       }
-
-      /* 2️⃣  email exists but not verified → resend code & OTP flow */
       if (isEmailNotVerifiedErr(error.message)) {
         toast.warning(
           "E-mail not verified. We’ve sent you a new verification code."
@@ -125,21 +122,19 @@ export function LoginForm({
         await sendOtp({ email: values.email });
         return;
       }
-
-      /* fallback */
-      return toast.error(error.message);
+      toast.error(error.message);
+      return;
     }
 
-    /* 🎉 login success */
     const user = data?.user;
     const display =
       user?.user_metadata?.full_name?.trim() || user?.email || "there";
     toast.success(`Welcome back, ${display}!`);
     showPostLoaderThenRedirect();
-  }
+  };
 
   /* ---------- send OTP ----------------------------------------- */
-  async function sendOtp(values: EmailVals) {
+  const sendOtp = async (values: EmailVals) => {
     setBusy("send");
 
     const { error } = await supabase.auth.signInWithOtp({
@@ -150,19 +145,20 @@ export function LoginForm({
 
     if (error) {
       if (isUserNotFoundErr(error.message)) {
-        toast.warning("User not found. Redirecting to sign-up…");
+        toast.warning(`${values.email} not found. Please sign-up.`);
         router.push("/register");
         return;
       }
-      return toast.error(error.message);
+      toast.error(error.message);
+      return;
     }
 
     toast.success("Verification code sent! Check your inbox.");
     showPreOtpLoader(values.email);
-  }
+  };
 
   /* ---------- verify OTP --------------------------------------- */
-  async function verifyOtp(values: OtpVals) {
+  const verifyOtp = async (values: OtpVals) => {
     setBusy("verify");
     const { data, error } = await supabase.auth.verifyOtp({
       email: savedEmail,
@@ -171,18 +167,20 @@ export function LoginForm({
     });
     setBusy(null);
 
-    if (error) return toast.error(error.message);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
 
-    /* success toast */
     const display =
       data.user?.user_metadata?.full_name?.trim() ||
       data.user?.email ||
       "there";
     toast.success(`Welcome back, ${display}!`);
     showPostLoaderThenRedirect();
-  }
+  };
 
-  /* ---------- UI (unchanged except for toasts) ------------------ */
+  /* ---------- UI ------------------------------------------------ */
   return (
     <div className={cn("grid gap-6", className)} {...props}>
       {/* STEP 1 — email + password */}
@@ -192,7 +190,7 @@ export function LoginForm({
             onSubmit={pwdForm.handleSubmit(loginWithPassword)}
             className="grid gap-4"
           >
-            {/* Email */}
+            {/* email field */}
             <FormField
               control={pwdForm.control}
               name="email"
@@ -207,7 +205,7 @@ export function LoginForm({
               )}
             />
 
-            {/* Password */}
+            {/* password field */}
             <FormField
               control={pwdForm.control}
               name="password"
@@ -237,7 +235,7 @@ export function LoginForm({
               Log in
             </Button>
 
-            {/* Divider */}
+            {/* divider */}
             <div className="relative my-2">
               <div className="absolute inset-0 flex items-center">
                 <span className="w-full border-t" />
@@ -259,16 +257,34 @@ export function LoginForm({
             </Button>
 
             <p className="text-sm text-center text-muted-foreground">
-              No account?{" "}
+              Don&apos;t have an account?{" "}
               <Link href="/register" className="underline">
                 Sign up
               </Link>
+            </p>
+
+            <p className="text-muted-foreground mt-4 px-8 text-center text-sm">
+              By clicking login, you agree to our{" "}
+              <a
+                href="/terms"
+                className="hover:text-primary underline underline-offset-4"
+              >
+                Terms of Service
+              </a>{" "}
+              and{" "}
+              <a
+                href="/privacy"
+                className="hover:text-primary underline underline-offset-4"
+              >
+                Privacy Policy
+              </a>
+              .
             </p>
           </form>
         </Form>
       )}
 
-      {/* STEP 2 — email for OTP */}
+      {/* STEP 2 — request OTP */}
       {stage === "emailOtp" && (
         <Form {...emailForm}>
           <form
@@ -309,7 +325,7 @@ export function LoginForm({
         </Form>
       )}
 
-      {/* STEP 2½ — loader */}
+      {/* STEP 2½ — tiny loader */}
       {stage === "preOtpLoader" && (
         <div className="flex flex-col items-center justify-center py-24">
           <Loader2 className="h-20 w-20 animate-spin text-primary" />
@@ -319,7 +335,7 @@ export function LoginForm({
         </div>
       )}
 
-      {/* STEP 3 — OTP input */}
+      {/* STEP 3 — OTP */}
       {stage === "otp" && (
         <Form {...otpForm}>
           <form
@@ -373,7 +389,7 @@ export function LoginForm({
         </Form>
       )}
 
-      {/* STEP 4 — post-login loader */}
+      {/* STEP 4 — final loader */}
       {stage === "postOtpLoader" && (
         <div className="flex flex-col items-center justify-center py-24">
           <Loader2 className="h-20 w-20 animate-spin text-primary" />
