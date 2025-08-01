@@ -1,4 +1,6 @@
 // utils/device.ts
+"use client";
+
 import { v4 as uuidv4 } from "uuid";
 
 const COOKIE_NAME = "device_id";

@@ -1,4 +1,6 @@
 // app/api/devices/route.ts
+"use client";
+
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabaseClient";
 
