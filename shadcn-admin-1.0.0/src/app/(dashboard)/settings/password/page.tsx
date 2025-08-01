@@ -1,3 +1,5 @@
+"use client"
+
 import ContentSection from "../components/content-section";
 import ChangePasswordForm from "./change-password-form";
 

@@ -43,7 +43,6 @@ export default function ChangePasswordForm() {
   const onSubmit = async (values: FormVals) => {
     setLoading(true);
     try {
-      // Ensure there is a current session
       const {
         data: { session: existingSession },
         error: sessionErr,
@@ -62,7 +61,6 @@ export default function ChangePasswordForm() {
         return;
       }
 
-      // Reauthenticate with current password to verify
       const {
         data: { session: newSession },
         error: signErr,
@@ -76,7 +74,6 @@ export default function ChangePasswordForm() {
         return;
       }
 
-      // Now update password on the active session
       const { error: updateErr } = await supabase.auth.updateUser({
         password: values.newPass,
       });
@@ -87,14 +84,12 @@ export default function ChangePasswordForm() {
       }
 
       toast.success("Password changed successfully!");
-      form.reset(); // optional: clear fields
+      form.reset();
 
-      // Optionally redirect after short delay
       setTimeout(() => {
         router.replace("/dashboard");
       }, 1200);
-    } catch (e) {
-      console.error(e);
+    } catch {
       toast.error("Unexpected error. Try again.");
     } finally {
       setLoading(false);
