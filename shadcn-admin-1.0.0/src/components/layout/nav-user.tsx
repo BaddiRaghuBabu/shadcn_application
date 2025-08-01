@@ -15,6 +15,8 @@ import { useState, useEffect } from "react";
 import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabaseClient";
+import { getOrSetDeviceId, clearDeviceId } from "@/lib/device";
+
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -96,7 +98,13 @@ export function NavUser({ user }: Props) {
   const fetchDeviceCount = async () => {
     setCountLoading(true);
     try {
-      const res = await fetch("/api/device-count");
+      const {
+        data: { session: current },
+      } = await supabase.auth.getSession();
+      const token = current?.access_token;
+      const res = await fetch("/api/device-count", {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
       const json = await res.json();
       if (res.ok) {
         setDeviceCount(json.device_count);
@@ -126,6 +134,28 @@ export function NavUser({ user }: Props) {
       if (error) {
         toast.error(error.message);
         return;
+      }
+
+      const {
+        data: { session: current },
+      } = await supabase.auth.getSession();
+      const token = current?.access_token;
+      const body =
+        scope === "local"
+          ? { device_id: getOrSetDeviceId() }
+          : { all: true };
+      if (token) {
+        await fetch("/api/devices", {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(body),
+        });
+      }
+      if (scope === "local") {
+        clearDeviceId();
       }
 
       toast.success(
@@ -171,7 +201,7 @@ export function NavUser({ user }: Props) {
           </DropdownMenuTrigger>
 
           <DropdownMenuContent
-            className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
+            className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-56 rounded-lg"
             side={isMobile ? "bottom" : "right"}
             align="end"
             sideOffset={4}

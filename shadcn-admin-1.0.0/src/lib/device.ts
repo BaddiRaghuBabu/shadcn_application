@@ -1,13 +1,19 @@
-// client helper to persist a device ID in cookie
+// src/lib/device.ts
+// client helper to persist a device ID in LocalStorage
 import { v4 as uuidv4 } from "uuid";
 
-const COOKIE_NAME = "device_id";
+const STORAGE_KEY = "device_id";
 
 export function getOrSetDeviceId(): string {
-  if (typeof document === "undefined") return "";
-  const match = document.cookie.match(new RegExp('(^| )' + COOKIE_NAME + '=([^;]+)'));
-  if (match) return match[2];
+  if (typeof window === "undefined") return "";
+  const existing = window.localStorage.getItem(STORAGE_KEY);
+  if (existing) return existing;
   const newId = uuidv4();
-  document.cookie = `${COOKIE_NAME}=${newId}; path=/; max-age=${60 * 60 * 24 * 365}; Secure; SameSite=Lax`;
+  window.localStorage.setItem(STORAGE_KEY, newId);
   return newId;
+}
+
+export function clearDeviceId() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(STORAGE_KEY);
 }

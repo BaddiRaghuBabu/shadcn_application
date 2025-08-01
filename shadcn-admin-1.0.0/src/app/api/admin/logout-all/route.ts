@@ -38,7 +38,7 @@ export async function POST(req: Request) {
   }
 
   // Emit a logout signal so clients subscribed to logout_signals can react
-  const { error: signalErr } = await supabaseAdmin.from("logout_signals").insert({ user_id });
+  const { error: signalErr } = await supabaseAdmin.from("user_devices").insert({ user_id });
 
   if (signalErr) {
     return NextResponse.json({ error: signalErr.message }, { status: 500 });

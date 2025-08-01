@@ -47,7 +47,6 @@ type OtpVals = z.infer<typeof otpSchema>;
 type Stage = "login" | "preOtpLoader" | "otp" | "postOtpLoader";
 
 /* ---------- helpers -------------------------------------------- */
-// Keep errors generic to avoid leaking which field failed unless email unverified.
 const isEmailNotVerifiedErr = (msg: string) =>
   /(email).*(not|un).*confirm|verify/i.test(msg) ||
   /email.*not verified/i.test(msg) ||
@@ -89,7 +88,7 @@ export function LoginForm({
   };
 
   /* ---------- device registration ------------------------------ */
-  const registerDevice = async (access_token: string) => {
+  const registerDevice = async (access_token: string, user_id: string) => {
     try {
       const device_id = getOrSetDeviceId();
       await fetch("/api/devices", {
@@ -97,11 +96,16 @@ export function LoginForm({
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${access_token}`,
+          "x-user-id": user_id, // your backend should verify token and ignore this if doing secure mapping
         },
-        body: JSON.stringify({ device_id }),
+        body: JSON.stringify({
+          device_id,
+          path: window.location.pathname,
+          user_agent: navigator.userAgent,
+        }),
       });
     } catch (e) {
-      // don't surface device registration failure to user
+      // swallow device registration failures
       // eslint-disable-next-line no-console
       console.warn("Device registration failed", e);
     }
@@ -117,7 +121,7 @@ export function LoginForm({
       },
     });
     setBusy(null);
-    if (error) toast.error("OAuth failed. Please try again."); // generic
+    if (error) toast.error("OAuth failed. Please try again.");
   };
 
   /* ---------- password login ----------------------------------- */
@@ -132,19 +136,17 @@ export function LoginForm({
         await sendOtp({ email: values.email });
         return;
       }
-      // generic invalid credentials message, to avoid enumeration
-      toast.error("Invalid email or password."); 
+      toast.error("Invalid email or password.");
       return;
     }
 
-    if (!data?.session) {
-      // unexpected missing session
+    if (!data?.session || !data.user) {
       toast.error("Authentication failed. Please try again.");
       return;
     }
 
-    // on success, register device
-    await registerDevice(data.session.access_token);
+    // on success, register device with user id
+    await registerDevice(data.session.access_token, data.user.id);
 
     const user = data.user;
     const display =
@@ -164,8 +166,7 @@ export function LoginForm({
     setBusy(null);
 
     if (error) {
-      // if you want to keep enumeration resistance, use same message for not-found
-      toast.error("Unable to send code. Check your email and try again."); 
+      toast.error("Unable to send code. Check your email and try again.");
       return;
     }
 
@@ -188,12 +189,12 @@ export function LoginForm({
       return;
     }
 
-    if (!data?.session) {
+    if (!data?.session || !data.user) {
       toast.error("Verification failed. Please retry.");
       return;
     }
 
-    await registerDevice(data.session.access_token);
+    await registerDevice(data.session.access_token, data.user.id);
 
     const display =
       data.user?.user_metadata?.full_name?.trim() ||
@@ -209,8 +210,8 @@ export function LoginForm({
       const {
         data: { session },
       } = await supabase.auth.getSession();
-      if (session) {
-        await registerDevice(session.access_token);
+      if (session && session.user) {
+        await registerDevice(session.access_token, session.user.id);
         toast.success("Welcome back!");
         showPostLoaderThenRedirect();
       }
@@ -236,7 +237,11 @@ export function LoginForm({
                 <FormItem>
                   <FormLabel>Email</FormLabel>
                   <FormControl>
-                    <Input placeholder="name@example.com" autoComplete="username" {...field} />
+                    <Input
+                      placeholder="name@example.com"
+                      autoComplete="username"
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
