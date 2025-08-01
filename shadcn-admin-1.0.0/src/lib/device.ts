@@ -1,6 +1,4 @@
-// utils/device.ts
-"use client";
-
+// client helper to persist a device ID in cookie
 import { v4 as uuidv4 } from "uuid";
 
 const COOKIE_NAME = "device_id";

@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabaseClient";
@@ -76,9 +76,9 @@ export function NavUser({ user }: Props) {
     const interval = setInterval(async () => {
       try {
         const {
-          data: { session },
+          data: { session: currentSession },
         } = await supabase.auth.getSession();
-        if (!session && !cancelled) {
+        if (!currentSession && !cancelled) {
           setSessionValid(false);
           router.replace("/login");
         }
@@ -93,53 +93,54 @@ export function NavUser({ user }: Props) {
     };
   }, [router]);
 
-  const fetchDeviceCount = useCallback(async () => {
+  const fetchDeviceCount = async () => {
     setCountLoading(true);
     try {
       const res = await fetch("/api/device-count");
       const json = await res.json();
       if (res.ok) {
         setDeviceCount(json.device_count);
+      } else {
+        // optionally surface a non-intrusive warning
+        // toast.warning("Could not load device count.");
       }
     } catch {
-      // silently ignore or optionally set fallback
+      // swallow silently or use toast depending on UX
+      // toast.warning("Error loading device count.");
     } finally {
       setCountLoading(false);
     }
-  }, []);
+  };
 
   useEffect(() => {
-    fetchDeviceCount();
-  }, [fetchDeviceCount]);
+    void fetchDeviceCount();
+  }, []);
 
-  const logout = useCallback(
-    async (scope: "local" | "global") => {
-      if (loadingScope) return;
-      setLoadingScope(scope);
-      try {
-        const { error } = await supabase.auth.signOut(
-          scope === "local" ? { scope: "local" } : undefined
-        );
-        if (error) {
-          toast.error(error.message);
-          return;
-        }
-
-        toast.success(
-          scope === "local"
-            ? "Logged out on this device"
-            : "Logged out on all devices"
-        );
-
-        router.replace("/login");
-      } catch {
-        toast.error("Unexpected error during logout");
-      } finally {
-        setLoadingScope(null);
+  const logout = async (scope: "local" | "global") => {
+    if (loadingScope) return;
+    setLoadingScope(scope);
+    try {
+      const { error } = await supabase.auth.signOut(
+        scope === "local" ? { scope: "local" } : undefined
+      );
+      if (error) {
+        toast.error(error.message);
+        return;
       }
-    },
-    [router, loadingScope]
-  );
+
+      toast.success(
+        scope === "local"
+          ? "Logged out on this device"
+          : "Logged out on all devices"
+      );
+
+      router.replace("/login");
+    } catch {
+      toast.error("Unexpected error during logout");
+    } finally {
+      setLoadingScope(null);
+    }
+  };
 
   if (!sessionValid) {
     return null;
@@ -231,7 +232,7 @@ export function NavUser({ user }: Props) {
             <DropdownMenuSeparator />
 
             <DropdownMenuItem
-              onClick={() => logout("local")}
+              onClick={() => void logout("local")}
               className="cursor-pointer flex items-center"
             >
               <PowerOff className="mr-2 size-4" />
@@ -241,7 +242,7 @@ export function NavUser({ user }: Props) {
             </DropdownMenuItem>
 
             <DropdownMenuItem
-              onClick={() => logout("global")}
+              onClick={() => void logout("global")}
               className="cursor-pointer flex items-center"
             >
               <Power className="mr-2 size-4" />

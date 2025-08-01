@@ -44,13 +44,10 @@ const otpSchema = z.object({
 
 type PwdVals = z.infer<typeof pwdSchema>;
 type OtpVals = z.infer<typeof otpSchema>;
-
 type Stage = "login" | "preOtpLoader" | "otp" | "postOtpLoader";
 
 /* ---------- helpers -------------------------------------------- */
-const isUserNotFoundErr = (msg: string) =>
-  /(user).*(not|no).*found/i.test(msg) || /invalid login credentials/i.test(msg);
-
+// Keep errors generic to avoid leaking which field failed unless email unverified.
 const isEmailNotVerifiedErr = (msg: string) =>
   /(email).*(not|un).*confirm|verify/i.test(msg) ||
   /email.*not verified/i.test(msg) ||
@@ -104,6 +101,7 @@ export function LoginForm({
         body: JSON.stringify({ device_id }),
       });
     } catch (e) {
+      // don't surface device registration failure to user
       // eslint-disable-next-line no-console
       console.warn("Device registration failed", e);
     }
@@ -119,7 +117,7 @@ export function LoginForm({
       },
     });
     setBusy(null);
-    if (error) toast.error(error.message);
+    if (error) toast.error("OAuth failed. Please try again."); // generic
   };
 
   /* ---------- password login ----------------------------------- */
@@ -129,27 +127,26 @@ export function LoginForm({
     setBusy(null);
 
     if (error) {
-      if (isUserNotFoundErr(error.message)) {
-        toast.warning(`${values.email} not found. Please sign-up.`);
-        router.push("/register");
-        return;
-      }
       if (isEmailNotVerifiedErr(error.message)) {
-        toast.warning(
-          "E-mail not verified. We’ve sent you a new verification code."
-        );
+        toast.warning("E-mail not verified. We’ve sent you a new verification code.");
         await sendOtp({ email: values.email });
         return;
       }
-      toast.error(error.message);
+      // generic invalid credentials message, to avoid enumeration
+      toast.error("Invalid email or password."); 
       return;
     }
 
-    if (data?.session) {
-      await registerDevice(data.session.access_token);
+    if (!data?.session) {
+      // unexpected missing session
+      toast.error("Authentication failed. Please try again.");
+      return;
     }
 
-    const user = data?.user;
+    // on success, register device
+    await registerDevice(data.session.access_token);
+
+    const user = data.user;
     const display =
       user?.user_metadata?.full_name?.trim() || user?.email || "there";
     toast.success(`Welcome back, ${display}!`);
@@ -167,12 +164,8 @@ export function LoginForm({
     setBusy(null);
 
     if (error) {
-      if (isUserNotFoundErr(error.message)) {
-        toast.warning(`${values.email} not found. Please sign-up.`);
-        router.push("/register");
-        return;
-      }
-      toast.error(error.message);
+      // if you want to keep enumeration resistance, use same message for not-found
+      toast.error("Unable to send code. Check your email and try again."); 
       return;
     }
 
@@ -191,13 +184,16 @@ export function LoginForm({
     setBusy(null);
 
     if (error) {
-      toast.error(error.message);
+      toast.error("Invalid or expired code.");
       return;
     }
 
-    if (data?.session) {
-      await registerDevice(data.session.access_token);
+    if (!data?.session) {
+      toast.error("Verification failed. Please retry.");
+      return;
     }
+
+    await registerDevice(data.session.access_token);
 
     const display =
       data.user?.user_metadata?.full_name?.trim() ||
@@ -240,7 +236,7 @@ export function LoginForm({
                 <FormItem>
                   <FormLabel>Email</FormLabel>
                   <FormControl>
-                    <Input placeholder="name@example.com" {...field} />
+                    <Input placeholder="name@example.com" autoComplete="username" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -263,7 +259,11 @@ export function LoginForm({
                     </Link>
                   </div>
                   <FormControl>
-                    <PasswordInput placeholder="********" {...field} />
+                    <PasswordInput
+                      placeholder="********"
+                      autoComplete="current-password"
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -326,6 +326,7 @@ export function LoginForm({
               >
                 Privacy Policy
               </a>
+              .
             </p>
           </form>
         </Form>
