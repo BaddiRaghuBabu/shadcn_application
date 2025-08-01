@@ -6,6 +6,8 @@ import {
   IconTool,
   IconUser,
   IconDevicesPc,
+  IconLock,
+
 
 } from "@tabler/icons-react"
 import { Header } from "@/components/layout/header"
@@ -21,6 +23,11 @@ const sidebarNavItems = [
     title: "Profile",
     icon: <IconUser />,
     href: "/settings/profile",
+  },
+    {
+    title: "Password",
+    icon: <IconLock />,
+    href: "/settings/password",
   },
   {
     title: "Billing",

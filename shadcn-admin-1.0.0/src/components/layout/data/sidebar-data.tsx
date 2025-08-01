@@ -134,6 +134,11 @@ export const sidebarData: SidebarData = {
               icon: IconUser,
               url: "/settings/profile",
             },
+              {
+              title: "Password",
+              icon: IconLock,
+              url: "/settings/password",
+            },
             {
               title: "Billing",
               icon: IconCoin,

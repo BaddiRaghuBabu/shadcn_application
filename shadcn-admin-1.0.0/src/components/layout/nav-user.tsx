@@ -133,6 +133,8 @@ export function NavUser({ user }: Props) {
       );
       if (error) {
         toast.error(error.message);
+          setLoadingScope(null);
+
         return;
       }
 
@@ -145,7 +147,7 @@ export function NavUser({ user }: Props) {
           ? { device_id: getOrSetDeviceId() }
           : { all: true };
       if (token) {
-        await fetch("/api/devices", {
+        const res = await fetch("/api/devices", {
           method: "DELETE",
           headers: {
             "Content-Type": "application/json",
@@ -153,6 +155,11 @@ export function NavUser({ user }: Props) {
           },
           body: JSON.stringify(body),
         });
+          if (!res.ok) {
+          toast.error("Unable to unregister device. Try again.");
+          setLoadingScope(null);
+          return;
+        }
       }
       if (scope === "local") {
         clearDeviceId();

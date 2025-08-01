@@ -75,12 +75,18 @@ export default function DeviceList() {
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token;
     if (token) {
-      await fetch("/api/devices", {
+        const res = await fetch("/api/devices", {
         method: "DELETE",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ device_id: localId }),
       });
+            if (!res.ok) {
+        toast.error("Unable to unregister device.");
+        setLoading(null);
+        return;
+      }
     }
+    
     clearDeviceId();
     router.replace("/login");
   };
@@ -96,11 +102,16 @@ export default function DeviceList() {
       return;
     }
     if (token) {
-      await fetch("/api/devices", {
+      const res =  await fetch("/api/devices", {
         method: "DELETE",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ all: true }),
       });
+            if (!res.ok) {
+        toast.error("Unable to unregister devices.");
+        setLoading(null);
+        return;
+      }
     }
     clearDeviceId();
     router.replace("/login");
@@ -111,11 +122,14 @@ export default function DeviceList() {
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token;
     if (!token) return;
-    await fetch("/api/devices", {
+    const res= await fetch("/api/devices", {
       method: "DELETE",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ device_id: id }),
     });
+        if (!res.ok) {
+      toast.error("Failed to remove device.");
+    }
     setLoading(null);
     void fetchDevices();
   };

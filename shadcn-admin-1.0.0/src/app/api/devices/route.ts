@@ -46,12 +46,28 @@ export async function POST(req: Request) {
   if (!user_id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const { device_id } = await req.json().catch(() => ({ device_id: null }));
+    const { device_id, path, user_agent } = await req
+    .json()
+    .catch(() => ({ device_id: null }));
   if (!device_id) {
     return NextResponse.json({ error: "device_id required" }, { status: 400 });
   }
+    const platform = req.headers.get("sec-ch-ua-platform") || null;
+  const ip_address =
+    req.headers.get("x-forwarded-for")?.split(",")[0] ||
+    req.headers.get("x-real-ip") ||
+    null;
+    
   const { error } = await supabaseAdmin.from("user_devices").upsert(
-    { user_id, device_id },
+      {
+      user_id,
+      device_id,
+      user_agent: user_agent ?? null,
+      platform,
+      ip_address,
+      path: path ?? null,
+      last_active: new Date().toISOString(),
+    },
     { onConflict: "device_id" }
   );
   if (error) {
