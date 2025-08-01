@@ -21,6 +21,26 @@ async function getUserId(req: Request) {
   return data.user.id;
 }
 
+export async function GET(req: Request) {
+  const user_id = await getUserId(req);
+  if (!user_id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const { data, error } = await supabaseAdmin
+    .from("user_devices")
+    .select(
+      "device_id, user_agent, platform, ip_address, last_active, created_at"
+    )
+    .eq("user_id", user_id)
+    .order("last_active", { ascending: false });
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  return NextResponse.json({ devices: data });
+}
+
+
+
 export async function POST(req: Request) {
   const user_id = await getUserId(req);
   if (!user_id) {

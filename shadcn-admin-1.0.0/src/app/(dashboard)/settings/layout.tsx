@@ -5,6 +5,8 @@ import {
   IconNotification,
   IconTool,
   IconUser,
+  IconDevicesPc,
+
 } from "@tabler/icons-react"
 import { Header } from "@/components/layout/header"
 import SidebarNav from "./components/sidebar-nav"
@@ -34,6 +36,11 @@ const sidebarNavItems = [
     title: "Connected Apps",
     icon: <IconApps />,
     href: "/settings/connected-apps",
+  },
+    {
+    title: "Connected Devices",
+    icon: <IconDevicesPc />,
+    href: "/settings/devices",
   },
   {
     title: "Notifications",
