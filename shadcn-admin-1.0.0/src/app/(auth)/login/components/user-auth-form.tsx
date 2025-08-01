@@ -1,13 +1,7 @@
-/* components/login-form.tsx
-   Password login + Email-OTP login
-   Behaviour:
-     • <email> not found  → toast “…not found. Please sign-up.” → push /register
-     • E-mail not verified → resend OTP & show OTP screen
-     • Success            → “Welcome back, <name|email>”
-------------------------------------------------------------------*/
+// components/login-form.tsx
 "use client";
 
-import { HTMLAttributes, useState } from "react";
+import { HTMLAttributes, useState, useEffect } from "react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -34,44 +28,40 @@ import {
   InputOTPGroup,
   InputOTPSlot,
 } from "@/components/ui/input-otp";
+import { getOrSetDeviceId } from "@/lib/device";
 
 /* ---------- validation ---------- */
 const pwdSchema = z.object({
-  email: z.string().email().min(1, "Email required"),
+  email: z.string().email({ message: "Invalid email" }).min(1, "Email required"),
   password: z.string().min(1, "Password required"),
 });
-const emailSchema = z.object({
-  email: z.string().email().min(1, "Email required"),
-});
 const otpSchema = z.object({
-  code: z.string().length(6, "6-digit code").regex(/^\d+$/, "Digits only"),
+  code: z
+    .string()
+    .length(6, "6-digit code")
+    .regex(/^\d+$/, "Digits only"),
 });
 
 type PwdVals = z.infer<typeof pwdSchema>;
-type EmailVals = z.infer<typeof emailSchema>;
 type OtpVals = z.infer<typeof otpSchema>;
 
-type Stage =
-  | "login"
-  | "emailOtp"
-  | "preOtpLoader"
-  | "otp"
-  | "postOtpLoader";
+type Stage = "login" | "preOtpLoader" | "otp" | "postOtpLoader";
 
 /* ---------- helpers -------------------------------------------- */
 const isUserNotFoundErr = (msg: string) =>
-  /(user).*(not|no).*found/i.test(msg) ||
-  /invalid login credentials/i.test(msg);
+  /(user).*(not|no).*found/i.test(msg) || /invalid login credentials/i.test(msg);
 
 const isEmailNotVerifiedErr = (msg: string) =>
-  /(email).*(not|un).*confirm|verify/i.test(msg);
+  /(email).*(not|un).*confirm|verify/i.test(msg) ||
+  /email.*not verified/i.test(msg) ||
+  /confirm your email/i.test(msg);
 
 export function LoginForm({
   className,
   ...props
 }: HTMLAttributes<HTMLDivElement>) {
   const [stage, setStage] = useState<Stage>("login");
-  const [busy, setBusy] = useState<"pwd" | "send" | "verify" | null>(null);
+  const [busy, setBusy] = useState<"pwd" | "send" | "verify" | "oauth" | null>(null);
   const [savedEmail, setSavedEmail] = useState("");
   const router = useRouter();
 
@@ -79,10 +69,6 @@ export function LoginForm({
   const pwdForm = useForm<PwdVals>({
     resolver: zodResolver(pwdSchema),
     defaultValues: { email: "", password: "" },
-  });
-  const emailForm = useForm<EmailVals>({
-    resolver: zodResolver(emailSchema),
-    defaultValues: { email: "" },
   });
   const otpForm = useForm<OtpVals>({
     resolver: zodResolver(otpSchema),
@@ -98,9 +84,42 @@ export function LoginForm({
     }, 1000);
   };
 
-  const showPostLoaderThenRedirect = () => {
+  const showPostLoaderThenRedirect = async () => {
     setStage("postOtpLoader");
-    setTimeout(() => router.push("/dashboard"), 1000);
+    setTimeout(() => {
+      router.push("/dashboard");
+    }, 1000);
+  };
+
+  /* ---------- device registration ------------------------------ */
+  const registerDevice = async (access_token: string) => {
+    try {
+      const device_id = getOrSetDeviceId();
+      await fetch("/api/devices", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${access_token}`,
+        },
+        body: JSON.stringify({ device_id }),
+      });
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn("Device registration failed", e);
+    }
+  };
+
+  /* ---------- Microsoft OAuth ---------------------------------- */
+  const signInWithMicrosoft = async () => {
+    setBusy("oauth");
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "azure",
+      options: {
+        redirectTo: `${location.origin}/dashboard`,
+      },
+    });
+    setBusy(null);
+    if (error) toast.error(error.message);
   };
 
   /* ---------- password login ----------------------------------- */
@@ -126,6 +145,10 @@ export function LoginForm({
       return;
     }
 
+    if (data?.session) {
+      await registerDevice(data.session.access_token);
+    }
+
     const user = data?.user;
     const display =
       user?.user_metadata?.full_name?.trim() || user?.email || "there";
@@ -133,8 +156,8 @@ export function LoginForm({
     showPostLoaderThenRedirect();
   };
 
-  /* ---------- send OTP ----------------------------------------- */
-  const sendOtp = async (values: EmailVals) => {
+  /* ---------- send OTP (auto-resend when not verified) ---------- */
+  const sendOtp = async (values: { email: string }) => {
     setBusy("send");
 
     const { error } = await supabase.auth.signInWithOtp({
@@ -172,6 +195,10 @@ export function LoginForm({
       return;
     }
 
+    if (data?.session) {
+      await registerDevice(data.session.access_token);
+    }
+
     const display =
       data.user?.user_metadata?.full_name?.trim() ||
       data.user?.email ||
@@ -179,6 +206,21 @@ export function LoginForm({
     toast.success(`Welcome back, ${display}!`);
     showPostLoaderThenRedirect();
   };
+
+  /* ---------- effect: if user already has session (e.g., landed after OAuth) ---------- */
+  useEffect(() => {
+    (async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session) {
+        await registerDevice(session.access_token);
+        toast.success("Welcome back!");
+        showPostLoaderThenRedirect();
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /* ---------- UI ------------------------------------------------ */
   return (
@@ -190,7 +232,7 @@ export function LoginForm({
             onSubmit={pwdForm.handleSubmit(loginWithPassword)}
             className="grid gap-4"
           >
-            {/* email field */}
+            {/* email */}
             <FormField
               control={pwdForm.control}
               name="email"
@@ -205,7 +247,7 @@ export function LoginForm({
               )}
             />
 
-            {/* password field */}
+            {/* password */}
             <FormField
               control={pwdForm.control}
               name="password"
@@ -228,14 +270,14 @@ export function LoginForm({
               )}
             />
 
-            <Button type="submit" disabled={busy === "pwd"}>
+            <Button type="submit" disabled={busy === "pwd"} className="w-full">
               {busy === "pwd" && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
               Log in
             </Button>
 
-            {/* divider */}
+            {/* Divider */}
             <div className="relative my-2">
               <div className="absolute inset-0 flex items-center">
                 <span className="w-full border-t" />
@@ -247,13 +289,19 @@ export function LoginForm({
               </div>
             </div>
 
+            {/* Microsoft OAuth button */}
             <Button
               variant="outline"
               type="button"
               className="w-full"
-              onClick={() => setStage("emailOtp")}
+              disabled={busy === "oauth"}
+              onClick={signInWithMicrosoft}
             >
-              Magic Code (Email OTP)
+              {busy === "oauth" && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              <span className="mr-2">🪟</span>
+              Sign in with Microsoft
             </Button>
 
             <p className="text-sm text-center text-muted-foreground">
@@ -278,54 +326,12 @@ export function LoginForm({
               >
                 Privacy Policy
               </a>
-              .
             </p>
           </form>
         </Form>
       )}
 
-      {/* STEP 2 — request OTP */}
-      {stage === "emailOtp" && (
-        <Form {...emailForm}>
-          <form
-            onSubmit={emailForm.handleSubmit(sendOtp)}
-            className="grid gap-4"
-          >
-            <FormField
-              control={emailForm.control}
-              name="email"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Your email</FormLabel>
-                  <FormControl>
-                    <Input placeholder="name@example.com" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <Button type="submit" disabled={busy === "send"}>
-              {busy === "send" && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
-              Send Code
-            </Button>
-
-            <Button
-              variant="link"
-              type="button"
-              className="justify-start p-0 text-sm"
-              disabled={busy !== null}
-              onClick={() => setStage("login")}
-            >
-              ← Back to password login
-            </Button>
-          </form>
-        </Form>
-      )}
-
-      {/* STEP 2½ — tiny loader */}
+      {/* STEP 2½ — tiny loader (auto-resend OTP) */}
       {stage === "preOtpLoader" && (
         <div className="flex flex-col items-center justify-center py-24">
           <Loader2 className="h-20 w-20 animate-spin text-primary" />
@@ -335,7 +341,7 @@ export function LoginForm({
         </div>
       )}
 
-      {/* STEP 3 — OTP */}
+      {/* STEP 3 — OTP (only unverified) */}
       {stage === "otp" && (
         <Form {...otpForm}>
           <form
@@ -366,30 +372,17 @@ export function LoginForm({
               )}
             />
 
-            <Button type="submit" disabled={busy === "verify"}>
+            <Button type="submit" disabled={busy === "verify"} className="w-full">
               {busy === "verify" && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
               Verify & Continue
             </Button>
-
-            <Button
-              variant="link"
-              type="button"
-              className="justify-start p-0 text-sm"
-              disabled={busy === "send"}
-              onClick={() => {
-                emailForm.setValue("email", savedEmail);
-                sendOtp({ email: savedEmail });
-              }}
-            >
-              Resend code
-            </Button>
           </form>
         </Form>
       )}
 
-      {/* STEP 4 — final loader */}
+      {/* Final loader */}
       {stage === "postOtpLoader" && (
         <div className="flex flex-col items-center justify-center py-24">
           <Loader2 className="h-20 w-20 animate-spin text-primary" />

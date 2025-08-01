@@ -1,44 +1,73 @@
-/* hooks/use-require-auth.ts
-   Redirect unauthenticated users to /login
-   (client hook, safe in Next.js app dir)
-------------------------------------------------------------------*/
+// hooks/use-require-auth.ts
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 1000; // base delay
+
 export function useRequireAuth() {
   const router = useRouter();
-  const pathname = usePathname();          // e.g. /dashboard or /login
-  const isMounted = useRef(false);         // ✅ prefer-const satisfied
+  const pathname = usePathname();
+  const isMounted = useRef(false);
+  const [checked, setChecked] = useState(false);
 
   useEffect(() => {
-    const ensure = async () => {
-      const { data } = await supabase.auth.getSession();
-      const session = data.session;
+    let active = true;
+    isMounted.current = true;
 
-      // Not signed in → always go to /login
-      if (!session && pathname !== "/login") {
-        router.replace("/login");
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+    const verifySession = async (attempt = 1): Promise<void> => {
+      if (!active) return;
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (!session) {
+          if (pathname !== "/login") router.replace("/login");
+          return;
+        }
+
+        if (pathname === "/login") {
+          router.replace("/dashboard");
+        }
+        return;
+      } catch (_err) {
+        if (attempt >= MAX_RETRIES) {
+          if (pathname !== "/login") router.replace("/login");
+          return;
+        }
+        const delay = RETRY_DELAY_MS * 2 ** (attempt - 1);
+        await wait(delay);
+        return verifySession(attempt + 1);
       }
     };
 
-    void ensure();                         // initial check
-    isMounted.current = true;
+    void verifySession();
 
-    /* listen for future auth changes */
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_evt, _sess) => {
-      if (isMounted.current) {
-        void ensure();                     // explicit call, no lint error
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!isMounted.current) return;
+      if (event === "SIGNED_OUT" || !session) {
+        router.replace("/login");
+        return;
+      }
+      if (session && pathname === "/login") {
+        router.replace("/dashboard");
       }
     });
 
+    setChecked(true);
+
     return () => {
+      active = false;
       isMounted.current = false;
-      subscription.unsubscribe();
+      data?.subscription.unsubscribe?.();
     };
   }, [router, pathname]);
+
+  return { checked };
 }
