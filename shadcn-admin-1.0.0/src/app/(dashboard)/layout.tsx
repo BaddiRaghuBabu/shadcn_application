@@ -1,4 +1,5 @@
 /* app/(dashboard)/layout.tsx – server component */
+
 import { cookies } from "next/headers";
 import { cn } from "@/lib/utils";
 import { SidebarProvider } from "@/components/ui/sidebar";

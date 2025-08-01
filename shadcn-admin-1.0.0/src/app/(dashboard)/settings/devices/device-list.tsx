@@ -25,7 +25,9 @@ export default function DeviceList() {
   const localId = getOrSetDeviceId();
 
   const fetchDevices = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
     const token = session?.access_token;
     if (session?.expires_at) {
       setExpiresAt(new Date(session.expires_at * 1000));
@@ -46,7 +48,9 @@ export default function DeviceList() {
     void fetchDevices();
     let channel: ReturnType<typeof supabase.channel> | null = null;
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return;
       channel = supabase
         .channel(`devices-${user.id}`)
@@ -66,52 +70,62 @@ export default function DeviceList() {
 
   const logoutLocal = async () => {
     setLoading("local");
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (token) {
+      const res = await fetch("/api/devices", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ device_id: localId }),
+      });
+      if (!res.ok) {
+        toast.error("Unable to unregister device.");
+        setLoading(null);
+        return;
+      }
+    }
     const { error } = await supabase.auth.signOut({ scope: "local" });
     if (error) {
       toast.error(error.message);
       setLoading(null);
       return;
     }
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token;
-    if (token) {
-        const res = await fetch("/api/devices", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ device_id: localId }),
-      });
-            if (!res.ok) {
-        toast.error("Unable to unregister device.");
-        setLoading(null);
-        return;
-      }
-    }
-    
+
     clearDeviceId();
     router.replace("/login");
   };
 
   const logoutGlobal = async () => {
     setLoading("global");
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
     const token = session?.access_token;
+    if (token) {
+      const res = await fetch("/api/devices", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ all: true }),
+      });
+      if (!res.ok) {
+        toast.error("Unable to unregister devices.");
+        setLoading(null);
+        return;
+      }
+    }
     const { error } = await supabase.auth.signOut();
     if (error) {
       toast.error(error.message);
       setLoading(null);
       return;
-    }
-    if (token) {
-      const res =  await fetch("/api/devices", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ all: true }),
-      });
-            if (!res.ok) {
-        toast.error("Unable to unregister devices.");
-        setLoading(null);
-        return;
-      }
     }
     clearDeviceId();
     router.replace("/login");
@@ -119,15 +133,19 @@ export default function DeviceList() {
 
   const removeDevice = async (id: string) => {
     setLoading(id);
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
     const token = session?.access_token;
-    if (!token) return;
-    const res= await fetch("/api/devices", {
+    if (!token) {
+      return;
+    }
+    const res = await fetch("/api/devices", {
       method: "DELETE",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ device_id: id }),
     });
-        if (!res.ok) {
+    if (!res.ok) {
       toast.error("Failed to remove device.");
     }
     setLoading(null);
@@ -157,7 +175,12 @@ export default function DeviceList() {
               {loading === "local" ? "Logging out…" : "Log out (this device)"}
             </Button>
           ) : (
-            <Button size="sm" variant="outline" onClick={() => void removeDevice(d.device_id)} disabled={loading === d.device_id}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void removeDevice(d.device_id)}
+              disabled={loading === d.device_id}
+            >
               {loading === d.device_id ? "Removing…" : "Remove"}
             </Button>
           )}

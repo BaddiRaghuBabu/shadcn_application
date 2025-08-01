@@ -1,3 +1,4 @@
+
 import ContentSection from "../components/content-section";
 import DeviceList from "./device-list";
 

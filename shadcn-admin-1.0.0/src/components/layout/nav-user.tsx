@@ -1,6 +1,7 @@
 // components/layout/nav-user.tsx
 "use client";
 
+import { useState, useEffect } from "react";
 import {
   BadgeCheck,
   Bell,
@@ -11,11 +12,10 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
 import { toast } from "sonner";
 
-import { supabase } from "@/lib/supabaseClient";
 import { getOrSetDeviceId, clearDeviceId } from "@/lib/device";
+import { supabase } from "@/lib/supabaseClient";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -84,10 +84,10 @@ export function NavUser({ user }: Props) {
           setSessionValid(false);
           router.replace("/login");
         }
-      } catch {
+      } catch (_err) {
         toast.error("Connection to auth backend unstable. Retrying...");
       }
-    }, 30_000);
+    }, 30000);
 
     return () => {
       cancelled = true;
@@ -102,19 +102,18 @@ export function NavUser({ user }: Props) {
         data: { session: current },
       } = await supabase.auth.getSession();
       const token = current?.access_token;
+      if (!token) {
+        return;
+      }
       const res = await fetch("/api/device-count", {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        headers: { Authorization: `Bearer ${token}` },
       });
       const json = await res.json();
       if (res.ok) {
         setDeviceCount(json.device_count);
-      } else {
-        // optionally surface a non-intrusive warning
-        // toast.warning("Could not load device count.");
       }
     } catch {
-      // swallow silently or use toast depending on UX
-      // toast.warning("Error loading device count.");
+      // intentionally ignored
     } finally {
       setCountLoading(false);
     }
@@ -125,27 +124,18 @@ export function NavUser({ user }: Props) {
   }, []);
 
   const logout = async (scope: "local" | "global") => {
-    if (loadingScope) return;
+    if (loadingScope) {
+      return;
+    }
     setLoadingScope(scope);
     try {
-      const { error } = await supabase.auth.signOut(
-        scope === "local" ? { scope: "local" } : undefined
-      );
-      if (error) {
-        toast.error(error.message);
-          setLoadingScope(null);
-
-        return;
-      }
-
       const {
         data: { session: current },
       } = await supabase.auth.getSession();
       const token = current?.access_token;
-      const body =
-        scope === "local"
-          ? { device_id: getOrSetDeviceId() }
-          : { all: true };
+
+      const body = scope === "local" ? { device_id: getOrSetDeviceId() } : { all: true };
+
       if (token) {
         const res = await fetch("/api/devices", {
           method: "DELETE",
@@ -155,24 +145,27 @@ export function NavUser({ user }: Props) {
           },
           body: JSON.stringify(body),
         });
-          if (!res.ok) {
+        if (!res.ok) {
           toast.error("Unable to unregister device. Try again.");
           setLoadingScope(null);
           return;
         }
       }
+
+      const { error } = await supabase.auth.signOut(scope === "local" ? { scope: "local" } : undefined);
+      if (error) {
+        toast.error(error.message);
+        setLoadingScope(null);
+        return;
+      }
+
       if (scope === "local") {
         clearDeviceId();
       }
 
-      toast.success(
-        scope === "local"
-          ? "Logged out on this device"
-          : "Logged out on all devices"
-      );
-
+      toast.success(scope === "local" ? "Logged out on this device" : "Logged out on all devices");
       router.replace("/login");
-    } catch {
+    } catch (_err) {
       toast.error("Unexpected error during logout");
     } finally {
       setLoadingScope(null);
@@ -199,7 +192,7 @@ export function NavUser({ user }: Props) {
                   {user.name?.[0] ?? "U"}
                 </AvatarFallback>
               </Avatar>
-              <div className="grid flex-1 text-left text-sm leading-tight ml-2">
+              <div className="ml-2 grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-semibold">{user.name}</span>
                 <span className="truncate text-xs">{user.email}</span>
               </div>
@@ -270,7 +263,7 @@ export function NavUser({ user }: Props) {
 
             <DropdownMenuItem
               onClick={() => void logout("local")}
-              className="cursor-pointer flex items-center"
+              className="flex cursor-pointer items-center"
             >
               <PowerOff className="mr-2 size-4" />
               {loadingScope === "local"
@@ -280,7 +273,7 @@ export function NavUser({ user }: Props) {
 
             <DropdownMenuItem
               onClick={() => void logout("global")}
-              className="cursor-pointer flex items-center"
+              className="flex cursor-pointer items-center"
             >
               <Power className="mr-2 size-4" />
               {loadingScope === "global"
