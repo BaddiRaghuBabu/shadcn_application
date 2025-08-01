@@ -1,18 +1,18 @@
 // components/login-form.tsx
-"use client";
+"use client"
 
-import { HTMLAttributes, useState, useEffect } from "react";
-import { z } from "zod";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
-
-import { supabase } from "@/lib/supabaseClient";
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
+import { HTMLAttributes, useState, useEffect } from "react"
+import { z } from "zod"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { Loader2 } from "lucide-react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
+import { getOrSetDeviceId } from "@/lib/device"
+import { supabase } from "@/lib/supabaseClient"
+import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 import {
   Form,
   FormControl,
@@ -20,77 +20,87 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { PasswordInput } from "@/components/password-input";
+} from "@/components/ui/form"
+import { Input } from "@/components/ui/input"
 import {
   InputOTP,
   InputOTPGroup,
   InputOTPSlot,
-} from "@/components/ui/input-otp";
-import { getOrSetDeviceId } from "@/lib/device";
+} from "@/components/ui/input-otp"
+import { PasswordInput } from "@/components/password-input"
+
+// components/login-form.ts
 
 /* ---------- validation ---------- */
 const pwdSchema = z.object({
-  email: z.string().email({ message: "Invalid email" }).min(1, "Email required"),
-  password: z.string().min(1, "Password required"),
-});
-const otpSchema = z.object({
-  code: z
+    email: z
     .string()
-    .length(6, "6-digit code")
-    .regex(/^\d+$/, "Digits only"),
-});
+    .email({ message: "Invalid email" })
+    .min(1, "Email required"),
+  password: z.string().min(1, "Password required"),
+})
+const otpSchema = z.object({
+  code: z.string().length(6, "6-digit code").regex(/^\d+$/, "Digits only"),
+})
 
-type PwdVals = z.infer<typeof pwdSchema>;
-type OtpVals = z.infer<typeof otpSchema>;
-type Stage = "login" | "preOtpLoader" | "otp" | "postOtpLoader";
+type PwdVals = z.infer<typeof pwdSchema>
+type OtpVals = z.infer<typeof otpSchema>
+type Stage = "login" | "preOtpLoader" | "otp" | "postOtpLoader"
 
 /* ---------- helpers -------------------------------------------- */
 const isEmailNotVerifiedErr = (msg: string) =>
   /(email).*(not|un).*confirm|verify/i.test(msg) ||
   /email.*not verified/i.test(msg) ||
-  /confirm your email/i.test(msg);
+  /confirm your email/i.test(msg)
 
 export function LoginForm({
   className,
   ...props
 }: HTMLAttributes<HTMLDivElement>) {
-  const [stage, setStage] = useState<Stage>("login");
-  const [busy, setBusy] = useState<"pwd" | "send" | "verify" | "oauth" | null>(null);
-  const [savedEmail, setSavedEmail] = useState("");
-  const router = useRouter();
+  const [stage, setStage] = useState<Stage>("login")
+  const [busy, setBusy] = useState<"pwd" | "send" | "verify" | "oauth" | null>(
+    null
+  )
+  const [savedEmail, setSavedEmail] = useState("")
+  const router = useRouter()
 
   /* forms */
   const pwdForm = useForm<PwdVals>({
     resolver: zodResolver(pwdSchema),
     defaultValues: { email: "", password: "" },
-  });
+  })
   const otpForm = useForm<OtpVals>({
     resolver: zodResolver(otpSchema),
     defaultValues: { code: "" },
-  });
+  })
 
   /* ---------- stage helpers ------------------------------------ */
   const showPreOtpLoader = (email: string) => {
-    setStage("preOtpLoader");
+    setStage("preOtpLoader")
     setTimeout(() => {
-      setSavedEmail(email);
-      setStage("otp");
-    }, 1000);
-  };
+       setSavedEmail(email)
+      setStage("otp")
+    }, 1000)
+  }
 
   const showPostLoaderThenRedirect = async () => {
-    setStage("postOtpLoader");
+    setStage("postOtpLoader")
     setTimeout(() => {
-      router.push("/dashboard");
-    }, 1000);
+      router.push("/dashboard")
+    }, 1000)
   };
 
   /* ---------- device registration ------------------------------ */
   const registerDevice = async (access_token: string, user_id: string) => {
     try {
-      const device_id = getOrSetDeviceId();
+            const device_id = getOrSetDeviceId()
+      let session_id: string | undefined
+      try {
+        const payload = JSON.parse(atob(access_token.split(".")[1] || ""))
+        session_id = payload.session_id as string | undefined
+      } catch {
+        session_id = undefined
+      }
       await fetch("/api/devices", {
         method: "POST",
         headers: {
@@ -100,10 +110,11 @@ export function LoginForm({
         },
         body: JSON.stringify({
           device_id,
+          session_id,
           path: window.location.pathname,
           user_agent: navigator.userAgent,
         }),
-      });
+      })
     } catch (e) {
       // swallow device registration failures
       // eslint-disable-next-line no-console
@@ -113,109 +124,109 @@ export function LoginForm({
 
   /* ---------- Microsoft OAuth ---------------------------------- */
   const signInWithMicrosoft = async () => {
-    setBusy("oauth");
+    setBusy("oauth")
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "azure",
       options: {
         redirectTo: `${location.origin}/dashboard`,
       },
-    });
-    setBusy(null);
-    if (error) toast.error("OAuth failed. Please try again.");
-  };
+    })
+    setBusy(null)
+    if (error) toast.error("OAuth failed. Please try again.")
+  }
 
   /* ---------- password login ----------------------------------- */
   const loginWithPassword = async (values: PwdVals) => {
-    setBusy("pwd");
-    const { data, error } = await supabase.auth.signInWithPassword(values);
-    setBusy(null);
+    setBusy("pwd")
+    const { data, error } = await supabase.auth.signInWithPassword(values)
+    setBusy(null)
 
     if (error) {
       if (isEmailNotVerifiedErr(error.message)) {
-        toast.warning("E-mail not verified. We’ve sent you a new verification code.");
-        await sendOtp({ email: values.email });
-        return;
+        toast.warning(
+          "E-mail not verified. We’ve sent you a new verification code."
+        )
+        await sendOtp({ email: values.email })
+        return
       }
-      toast.error("Invalid email or password.");
-      return;
+      toast.error("Invalid email or password.")
+      return
     }
 
     if (!data?.session || !data.user) {
-      toast.error("Authentication failed. Please try again.");
-      return;
+      toast.error("Authentication failed. Please try again.")
+      return
     }
 
     // on success, register device with user id
-    await registerDevice(data.session.access_token, data.user.id);
+    await registerDevice(data.session.access_token, data.user.id)
 
-    const user = data.user;
+    const user = data.user
     const display =
-      user?.user_metadata?.full_name?.trim() || user?.email || "there";
-    toast.success(`Welcome back, ${display}!`);
-    showPostLoaderThenRedirect();
-  };
+      user?.user_metadata?.full_name?.trim() || user?.email || "there"
+    toast.success(`Welcome back, ${display}!`)
+    showPostLoaderThenRedirect()
+  }
 
   /* ---------- send OTP (auto-resend when not verified) ---------- */
   const sendOtp = async (values: { email: string }) => {
-    setBusy("send");
+    setBusy("send")
 
     const { error } = await supabase.auth.signInWithOtp({
       email: values.email,
-    });
+    })
 
-    setBusy(null);
+    setBusy(null)
 
     if (error) {
-      toast.error("Unable to send code. Check your email and try again.");
-      return;
+      toast.error("Unable to send code. Check your email and try again.")
+      return
     }
 
-    toast.success("Verification code sent! Check your inbox.");
-    showPreOtpLoader(values.email);
+    toast.success("Verification code sent! Check your inbox.")
+    showPreOtpLoader(values.email)
   };
 
   /* ---------- verify OTP --------------------------------------- */
   const verifyOtp = async (values: OtpVals) => {
-    setBusy("verify");
+    setBusy("verify")
     const { data, error } = await supabase.auth.verifyOtp({
       email: savedEmail,
       token: values.code,
       type: "email",
     });
-    setBusy(null);
+    setBusy(null)
 
     if (error) {
-      toast.error("Invalid or expired code.");
-      return;
+      toast.error("Invalid or expired code.")
+      return
     }
 
     if (!data?.session || !data.user) {
-      toast.error("Verification failed. Please retry.");
-      return;
+      toast.error("Verification failed. Please retry.")
+      return
     }
 
-    await registerDevice(data.session.access_token, data.user.id);
+    await registerDevice(data.session.access_token, data.user.id)
 
     const display =
-      data.user?.user_metadata?.full_name?.trim() ||
-      data.user?.email ||
-      "there";
-    toast.success(`Welcome back, ${display}!`);
-    showPostLoaderThenRedirect();
-  };
+      data.user?.user_metadata?.full_name?.trim() || data.user?.email || "there"
+    toast.success(`Welcome back, ${display}!`)
+    showPostLoaderThenRedirect()
+  }
 
   /* ---------- effect: if user already has session (e.g., landed after OAuth) ---------- */
   useEffect(() => {
-    (async () => {
+    ;(async () => {
       const {
         data: { session },
-      } = await supabase.auth.getSession();
+      } = await supabase.auth.getSession()
       if (session && session.user) {
-        await registerDevice(session.access_token, session.user.id);
-        toast.success("Welcome back!");
-        showPostLoaderThenRedirect();
+        await registerDevice(session.access_token, session.user.id)
+        toast.success("Welcome back!")
+        showPostLoaderThenRedirect()
       }
-    })();
+    })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -258,7 +269,7 @@ export function LoginForm({
                     <FormLabel>Password</FormLabel>
                     <Link
                       href="/forgot-password"
-                      className="text-sm text-muted-foreground hover:opacity-75"
+                      className="text-muted-foreground text-sm hover:opacity-75"
                     >
                       Forgot Password?
                     </Link>
@@ -309,7 +320,7 @@ export function LoginForm({
               Sign in with Microsoft
             </Button>
 
-            <p className="text-sm text-center text-muted-foreground">
+            <p className="text-muted-foreground text-center text-sm">
               Don&apos;t have an account?{" "}
               <Link href="/register" className="underline">
                 Sign up
@@ -340,8 +351,8 @@ export function LoginForm({
       {/* STEP 2½ — tiny loader (auto-resend OTP) */}
       {stage === "preOtpLoader" && (
         <div className="flex flex-col items-center justify-center py-24">
-          <Loader2 className="h-20 w-20 animate-spin text-primary" />
-          <p className="mt-6 text-sm text-muted-foreground">
+           <Loader2 className="text-primary h-20 w-20 animate-spin" />
+          <p className="text-muted-foreground mt-6 text-sm">
             Preparing verification …
           </p>
         </div>
@@ -354,7 +365,7 @@ export function LoginForm({
             onSubmit={otpForm.handleSubmit(verifyOtp)}
             className="grid gap-4"
           >
-            <p className="text-sm text-muted-foreground">
+            <p className="text-muted-foreground text-sm">
               Enter the 6-digit code sent to <strong>{savedEmail}</strong>
             </p>
 
@@ -378,8 +389,11 @@ export function LoginForm({
               )}
             />
 
-            <Button type="submit" disabled={busy === "verify"} className="w-full">
-              {busy === "verify" && (
+            <Button
+              type="submit"
+              disabled={busy === "verify"}
+              className="w-full"
+            >              {busy === "verify" && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
               Verify & Continue
@@ -391,12 +405,12 @@ export function LoginForm({
       {/* Final loader */}
       {stage === "postOtpLoader" && (
         <div className="flex flex-col items-center justify-center py-24">
-          <Loader2 className="h-20 w-20 animate-spin text-primary" />
-          <p className="mt-6 text-sm text-muted-foreground">
+          <Loader2 className="text-primary h-20 w-20 animate-spin" />
+          <p className="text-muted-foreground mt-6 text-sm">
             Redirecting to your dashboard …
           </p>
         </div>
       )}
     </div>
-  );
+  )
 }
