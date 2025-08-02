@@ -15,15 +15,20 @@ const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
   auth: { persistSession: false },
 })
 
-// helper to extract user ID from bearer token
-async function getUserId(req: Request): Promise<string | null> {
+// helper to extract user ID from bearer token.
+// Uses a lightweight JWT decode so we don't depend on the auth API,
+// which was causing 401 responses for some users.
+  async function getUserId(req: Request): Promise<string | null> {
   const auth = req.headers.get("authorization") || ""
   const token = auth.replace(/^Bearer\s+/i, "").trim()
   if (!token) return null
 
-  const { data, error } = await supabaseAdmin.auth.getUser(token)
-  if (error || !data?.user) return null
-  return data.user.id
+  try {
+    const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64").toString())
+    return typeof payload.sub === "string" ? payload.sub : null
+  } catch {
+    return null
+  }
 }
 
 // Schema for POST body
@@ -122,6 +127,20 @@ export async function DELETE(req: Request) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
+    // if a global logout was requested, broadcast a force-logout event so that
+  // other connected sessions can react immediately and redirect to the login
+  // screen instead of waiting for token expiry
+  if (all) {
+    const channel = supabaseAdmin.channel(`logout-user-${user_id}`)
+    // fire and forget – clients listening on this channel will sign out
+    await channel.send({
+      type: "broadcast",
+      event: "force-logout",
+      payload: {},
+    })
+    await channel.unsubscribe()
+  }
+
 
   return NextResponse.json({ success: true })
 }

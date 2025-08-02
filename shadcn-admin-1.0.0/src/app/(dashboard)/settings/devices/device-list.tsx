@@ -97,10 +97,15 @@ export default function DeviceList() {
     }
 
     clearDeviceId();
+    toast.success("Logged out on this device");
     router.replace("/login");
   };
 
   const logoutGlobal = async () => {
+     if (!confirm("Log out from all devices?")) {
+      return;
+    }
+  
     setLoading("global");
     const {
       data: { session },
@@ -128,11 +133,17 @@ export default function DeviceList() {
       return;
     }
     clearDeviceId();
+    toast.success("Logged out on all devices");
     router.replace("/login");
   };
 
-  const removeDevice = async (id: string) => {
-    setLoading(id);
+    const removeDevice = async (device: Device) => {
+    const name = device.platform || "Unknown device";
+    if (!confirm(`Remove ${name}?`)) {
+      return;
+    }
+    setLoading(device.device_id);
+
     const {
       data: { session },
     } = await supabase.auth.getSession();
@@ -143,10 +154,12 @@ export default function DeviceList() {
     const res = await fetch("/api/devices", {
       method: "DELETE",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ device_id: id }),
+      body: JSON.stringify({ device_id: device.device_id }),
     });
     if (!res.ok) {
       toast.error("Failed to remove device.");
+     } else {
+      toast.success(`${name} removed`);
     }
     setLoading(null);
     void fetchDevices();
@@ -178,7 +191,7 @@ export default function DeviceList() {
             <Button
               size="sm"
               variant="outline"
-              onClick={() => void removeDevice(d.device_id)}
+              onClick={() => void removeDevice(d)}
               disabled={loading === d.device_id}
             >
               {loading === d.device_id ? "Removing…" : "Remove"}

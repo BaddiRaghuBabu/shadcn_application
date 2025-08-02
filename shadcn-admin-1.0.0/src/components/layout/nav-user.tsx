@@ -1,7 +1,7 @@
 // components/layout/nav-user.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   BadgeCheck,
   Bell,
@@ -95,7 +95,7 @@ export function NavUser({ user }: Props) {
     };
   }, [router]);
 
-  const fetchDeviceCount = async () => {
+  const fetchDeviceCount = useCallback(async () => {
     setCountLoading(true);
     try {
       const {
@@ -111,20 +111,53 @@ export function NavUser({ user }: Props) {
       const json = await res.json();
       if (res.ok) {
         setDeviceCount(json.device_count);
+                // if all devices have been removed (e.g., global logout from another
+        // device), immediately clear the local session and redirect the user
+        if (json.device_count === 0) {
+          await supabase.auth.signOut({ scope: "local" });
+          router.replace("/login");
+        }
       }
     } catch {
       // intentionally ignored
     } finally {
       setCountLoading(false);
     }
-  };
+    }, [router]);
+
 
   useEffect(() => {
     void fetchDeviceCount();
-  }, []);
+      // subscribe to device list changes so the count stays current and we can
+    // react to remote logouts in real time
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+      channel = supabase
+        .channel(`device-count-${user.id}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "user_devices", filter: `user_id=eq.${user.id}` },
+          () => {
+            void fetchDeviceCount();
+          }
+        )
+        .subscribe();
+    })();
+    return () => {
+      channel?.unsubscribe();
+    };
+  }, [fetchDeviceCount]);
+
 
   const logout = async (scope: "local" | "global") => {
     if (loadingScope) {
+      return;
+    }
+      if (scope === "global" && !confirm("Log out from all devices?")) {
       return;
     }
     setLoadingScope(scope);
