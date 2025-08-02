@@ -1,5 +1,16 @@
 import { Card } from "@/components/ui/card"
 import { LoginForm } from "./components/user-auth-form"
+import { Suspense } from "react"
+import { Loader2 } from "lucide-react"
+
+
+function LoginFallback() {
+  return (
+    <div className="flex w-full justify-center py-8">
+      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+    </div>
+  )
+}
 
 export default function LoginPage() {
   return (
@@ -11,7 +22,9 @@ export default function LoginPage() {
           to log into your account
         </p>
       </div>
-      <LoginForm />
+      <Suspense fallback={<LoginFallback />}>
+        <LoginForm />
+      </Suspense>
    
     </Card>
   )

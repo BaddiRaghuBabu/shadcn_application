@@ -135,13 +135,13 @@ export function LoginForm({ className, ...props }: HTMLAttributes<HTMLDivElement
     setBusy("send");
 
     try {
-      const { error: existenceErr } = await supabase.auth.signInWithOtp({
+      const { error } = await supabase.auth.signInWithOtp({
         email,
         options: { shouldCreateUser: false },
       });
 
-      if (existenceErr) {
-        const msg = existenceErr.message.toLowerCase();
+      if (error) {
+        const msg = error.message.toLowerCase();
         if (
           msg.includes("user not found") ||
           msg.includes("no user") ||
@@ -149,17 +149,9 @@ export function LoginForm({ className, ...props }: HTMLAttributes<HTMLDivElement
           msg.includes("not a valid login")
         ) {
           toast.error("Email not registered. Please sign up first.");
-          return;
-        }
-      }
+  
+         } else if (msg.includes("rate")) {
 
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: { shouldCreateUser: false },
-      });
-
-      if (error) {
-        if (error.message.toLowerCase().includes("rate")) {
           toast.error("Too many attempts. Please wait and try again.");
         } else {
           toast.error(`Failed to send code: ${error.message}`);

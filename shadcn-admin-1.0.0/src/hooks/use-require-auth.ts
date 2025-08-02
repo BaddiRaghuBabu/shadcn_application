@@ -74,12 +74,17 @@ export function useRequireAuth() {
     const userId = session?.user.id;
     if (!userId) return;
 
-    const channel = supabase
-      .channel(`logout-user-${userId}`)
+    type ForceLogoutPayload = { device_id?: string } | null;
+
+    // cast to any to bypass restrictive typings for .on("broadcast", ...)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const channel: any = supabase.channel(`logout-user-${userId}`);
+
+    channel
       .on(
         "broadcast",
         { event: "force-logout" },
-        (payload: { device_id?: string } | null) => {
+        (payload: ForceLogoutPayload) => {
           const currentDevice = getOrSetDeviceId();
           if (!payload?.device_id || payload.device_id === currentDevice) {
             void supabase.auth.signOut();
@@ -88,7 +93,7 @@ export function useRequireAuth() {
         }
       )
       .subscribe();
-addEventListener
+
     return () => {
       channel.unsubscribe();
     };
