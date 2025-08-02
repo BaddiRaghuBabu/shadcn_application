@@ -129,7 +129,7 @@ export async function POST(req: Request) {
         })
       )
     )
-    await channel.unsubscribe()
+    await supabaseAdmin.removeChannel(channel)
   }
 
 
@@ -171,7 +171,7 @@ export async function DELETE(req: Request) {
       event: "force-logout",
       payload: {},
     })
-    await channel.unsubscribe()
+    await supabaseAdmin.removeChannel(channel)
   }
 
 
