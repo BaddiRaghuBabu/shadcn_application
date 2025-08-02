@@ -16,7 +16,6 @@ import {
   IconUser,
   IconUserOff,
   IconUsers,
-  IconDevicesPc
 } from "@tabler/icons-react"
 import { AudioWaveform, GalleryVerticalEnd } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -155,11 +154,7 @@ export const sidebarData: SidebarData = {
               icon: IconApps,
               url: "/settings/connected-apps",
             },
-              {
-              title: "Connected Devices",
-              icon: IconDevicesPc,
-              url: "/settings/devices",
-            },
+
             {
               title: "Notifications",
               icon: IconNotification,

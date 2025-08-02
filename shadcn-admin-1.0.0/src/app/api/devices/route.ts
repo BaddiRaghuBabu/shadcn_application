@@ -100,9 +100,42 @@ export async function POST(req: Request) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
+   // enforce single-device login: remove any other devices and notify them
+  const { data: existing } = await supabaseAdmin
+    .from("user_devices")
+    .select("device_id")
+    .eq("user_id", user_id)
+
+  const otherIds = (existing || [])
+    .map((d: { device_id: string }) => d.device_id)
+    .filter((id: string) => id !== device_id)
+
+  if (otherIds.length > 0) {
+    // delete old device records
+    await supabaseAdmin
+      .from("user_devices")
+      .delete()
+      .eq("user_id", user_id)
+      .in("device_id", otherIds)
+
+    // broadcast targeted logout to old devices
+    const channel = supabaseAdmin.channel(`logout-user-${user_id}`)
+    await Promise.all(
+      otherIds.map((id) =>
+        channel.send({
+          type: "broadcast",
+          event: "force-logout",
+          payload: { device_id: id },
+        })
+      )
+    )
+    await channel.unsubscribe()
+  }
+
 
   return NextResponse.json({ success: true })
 }
+
 
 export async function DELETE(req: Request) {
   const user_id = await getUserId(req)

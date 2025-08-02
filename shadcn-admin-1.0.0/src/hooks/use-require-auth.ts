@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { getOrSetDeviceId } from "@/lib/device";
 import type { Session } from "@supabase/supabase-js";
 
 export function useRequireAuth() {
@@ -19,17 +20,23 @@ export function useRequireAuth() {
     const {
       data: { session: currentSession },
     } = await supabase.auth.getSession();
+
     if (!currentSession) {
-      if (pathname !== "/login") router.replace("/login");
+      if (pathname !== "/login") {
+        router.replace("/login");
+      }
       setSession(null);
     } else {
       setSession(currentSession);
-      if (pathname === "/login") router.replace("/dashboard");
+      if (pathname === "/login") {
+        router.replace("/dashboard");
+      }
     }
   }, [pathname, router]);
 
   useEffect(() => {
     isMounted.current = true;
+
     (async () => {
       await verifySession();
       if (isMounted.current) {
@@ -38,38 +45,50 @@ export function useRequireAuth() {
       }
     })();
 
-    const { data: listener } = supabase.auth.onAuthStateChange((event, newSession) => {
+    const {
+      data: { subscription: authSubscription },
+    } = supabase.auth.onAuthStateChange((event, newSession) => {
       if (!isMounted.current) return;
+
       if (event === "SIGNED_OUT" || !newSession) {
-        router.replace("/login");
+        if (pathname !== "/login") {
+          router.replace("/login");
+        }
         setSession(null);
-      } else if (newSession) {
+      } else {
         setSession(newSession);
-        if (pathname === "/login") router.replace("/dashboard");
+        if (pathname === "/login") {
+          router.replace("/dashboard");
+        }
       }
     });
 
     return () => {
       isMounted.current = false;
-      listener?.subscription.unsubscribe();
+      authSubscription?.unsubscribe();
     };
   }, [router, pathname, verifySession]);
 
-  // forced global logout via broadcast
+  // forced global logout via broadcast (optionally targeted by device)
   useEffect(() => {
     const userId = session?.user.id;
     if (!userId) return;
+
     const channel = supabase
       .channel(`logout-user-${userId}`)
       .on(
         "broadcast",
         { event: "force-logout" },
-        () => {
-          void supabase.auth.signOut();
-          router.replace("/login");
+        (payload: { device_id?: string } | null) => {
+          const currentDevice = getOrSetDeviceId();
+          if (!payload?.device_id || payload.device_id === currentDevice) {
+            void supabase.auth.signOut();
+            router.replace("/login");
+          }
         }
       )
       .subscribe();
+addEventListener
     return () => {
       channel.unsubscribe();
     };

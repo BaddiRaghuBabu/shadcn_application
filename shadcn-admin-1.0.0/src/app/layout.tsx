@@ -17,14 +17,16 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
+  
 }: Readonly<{
   children: React.ReactNode
-}>) {
+} >) { 
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.className} group/body antialiased`}>
         <Providers>{children}</Providers>
         <Toaster />
+
       </body>
     </html>
   )

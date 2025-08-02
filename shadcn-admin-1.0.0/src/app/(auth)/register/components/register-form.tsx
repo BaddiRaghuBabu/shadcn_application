@@ -1,7 +1,4 @@
-/* components/register-form.tsx
-   Unified sign-up (password or email-only) with a single
-   “User already exists” check, then redirects to /login
-------------------------------------------------------------------*/
+// components/register-form.tsx
 "use client";
 
 import { HTMLAttributes, useState } from "react";
@@ -13,6 +10,7 @@ import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
 import { supabase } from "@/lib/supabaseClient";
+import { registerDevice } from "@/lib/device";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,7 +28,7 @@ import {
   InputOTPGroup,
   InputOTPSlot,
 } from "@/components/ui/input-otp";
-import type { User } from "@supabase/supabase-js"; // ✅ removes “any” warning
+import type { User } from "@supabase/supabase-js";
 
 /* ---------- validation ---------- */
 const pwdSchema = z
@@ -114,7 +112,6 @@ export function RegisterForm({
       password: values.password,
     });
 
-    /* duplicate caught explicitly */
     if (error) {
       setBusy(null);
       if (explicitDuplicateErr(error.message)) {
@@ -125,7 +122,6 @@ export function RegisterForm({
       return;
     }
 
-    /* silent duplicate */
     if (silentDuplicate(data?.user)) {
       setBusy(null);
       toast.warning("User already exists. Please sign in.");
@@ -150,10 +146,45 @@ export function RegisterForm({
     setStage("otp");
   };
 
-  /* ---------- email-only sign-up ------------------------------- */
+  /* ---------- email-only sign-up with existence check ---------- */
   const sendOtp = async (values: EmailVals) => {
     setBusy("send");
 
+    // Preflight: try to send OTP without creating user to detect existing account
+    const { error: existsErr } = await supabase.auth.signInWithOtp({
+      email: values.email,
+      options: { shouldCreateUser: false },
+    });
+
+    if (!existsErr) {
+      // No error means user exists and we successfully triggered OTP for login — tell user to login instead
+      setBusy(null);
+      toast.warning("Email already exists. Please login.");
+      router.push(`/login?email=${encodeURIComponent(values.email)}`);
+      return;
+    }
+
+    // Heuristic: if error message suggests "user not found" or similar, proceed to create account via magic code
+    const isNotFound =
+      /not found/i.test(existsErr.message) ||
+      /no user/i.test(existsErr.message) ||
+      /user does not exist/i.test(existsErr.message) ||
+      /invalid login credentials/i.test(existsErr.message); // fallback, adjust as needed
+
+    if (!isNotFound) {
+      // Some other error (rate limit, network, etc.)
+      setBusy(null);
+      // If it's clearly duplicate but phrased differently, still redirect
+      if (explicitDuplicateErr(existsErr.message)) {
+        toast.warning("Email already exists. Please login.");
+        router.push(`/login?email=${encodeURIComponent(values.email)}`);
+        return;
+      }
+      toast.error(existsErr.message);
+      return;
+    }
+
+    // Email not found → create via magic code / OTP
     const { error } = await supabase.auth.signInWithOtp({
       email: values.email,
       options: { shouldCreateUser: true },
@@ -164,6 +195,7 @@ export function RegisterForm({
     if (error) {
       if (explicitDuplicateErr(error.message)) {
         toast.warning("User already exists. Please sign in.");
+        router.push(`/login?email=${encodeURIComponent(values.email)}`);
       } else {
         toast.error(error.message);
       }
@@ -178,7 +210,7 @@ export function RegisterForm({
   /* ---------- verify OTP --------------------------------------- */
   const verifyOtp = async (values: OtpVals) => {
     setBusy("verify");
-    const { error } = await supabase.auth.verifyOtp({
+    const { data, error } = await supabase.auth.verifyOtp({
       email: savedEmail,
       token: values.code,
       type: "email",
@@ -188,6 +220,11 @@ export function RegisterForm({
     if (error) {
       toast.error(error.message);
       return;
+    }
+
+    if (data?.session && data.user) {
+      await registerDevice(data.session.access_token, data.user.id);
+      await supabase.auth.signOut();
     }
     goToLogin();
   };
@@ -278,10 +315,7 @@ export function RegisterForm({
       {/* STEP 2 — email-only path */}
       {stage === "emailOtp" && (
         <Form {...emailForm}>
-          <form
-            onSubmit={emailForm.handleSubmit(sendOtp)}
-            className="grid gap-4"
-          >
+          <form onSubmit={emailForm.handleSubmit(sendOtp)} className="grid gap-4">
             <FormField
               control={emailForm.control}
               name="email"
@@ -319,13 +353,9 @@ export function RegisterForm({
       {/* STEP 3 — 6-digit code */}
       {stage === "otp" && (
         <Form {...otpForm}>
-          <form
-            onSubmit={otpForm.handleSubmit(verifyOtp)}
-            className="grid gap-4"
-          >
+          <form onSubmit={otpForm.handleSubmit(verifyOtp)} className="grid gap-4">
             <p className="text-sm text-muted-foreground">
-              Enter the 6-digit code sent to{" "}
-              <strong>{savedEmail}</strong>
+              Enter the 6-digit code sent to <strong>{savedEmail}</strong>
             </p>
 
             <FormField
