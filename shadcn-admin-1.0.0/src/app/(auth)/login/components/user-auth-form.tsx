@@ -1,7 +1,6 @@
-// components/login-form.tsx
 "use client";
 
-import { HTMLAttributes, useState, useEffect } from "react";
+import { HTMLAttributes, useState, useEffect, useRef, useCallback } from "react";
 import { z } from "zod";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -44,10 +43,69 @@ const otpSchema = z.object({
 type PwdVals = z.infer<typeof pwdSchema>;
 type EmailVals = z.infer<typeof emailSchema>;
 type OtpVals = z.infer<typeof otpSchema>;
-
 type Stage = "login" | "magicEmail" | "preOtpLoader" | "otp" | "postOtpLoader";
 
-/* ---------- helpers -------------------------------------------- */
+/* ---------- typed window for grecaptcha ---------- */
+interface GrecaptchaAPI {
+  render: (
+    container: string | HTMLElement,
+    parameters: {
+      sitekey: string;
+      callback: (token: string) => void;
+      "expired-callback"?: () => void;
+      size?: string;
+    }
+  ) => number;
+  reset: (widgetId: number) => void;
+  ready?: (cb: () => void) => void;
+}
+declare global {
+  interface Window {
+    grecaptcha?: GrecaptchaAPI;
+  }
+}
+
+/* ---------- helper to load reCAPTCHA script ---------- */
+const loadRecaptchaScript = (): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    if (typeof window === "undefined") return reject(new Error("No window"));
+    if (window.grecaptcha) return resolve();
+    const existing = document.getElementById("recaptcha-v2-script");
+    if (existing) {
+      const interval = setInterval(() => {
+        if (window.grecaptcha) {
+          clearInterval(interval);
+          resolve();
+        }
+      }, 100);
+      setTimeout(() => {
+        clearInterval(interval);
+        reject(new Error("grecaptcha init timeout"));
+      }, 5000);
+      return;
+    }
+    const script = document.createElement("script");
+    script.id = "recaptcha-v2-script";
+    script.src = "https://www.google.com/recaptcha/api.js?render=explicit";
+    script.async = true;
+    script.defer = true;
+    script.onload = () => {
+      const interval = setInterval(() => {
+        if (window.grecaptcha) {
+          clearInterval(interval);
+          resolve();
+        }
+      }, 100);
+      setTimeout(() => {
+        clearInterval(interval);
+        reject(new Error("grecaptcha ready timeout"));
+      }, 5000);
+    };
+    script.onerror = () => reject(new Error("Failed to load reCAPTCHA"));
+    document.head.appendChild(script);
+  });
+};
+
 const isEmailNotVerifiedErr = (msg: string) =>
   /(email).*(not|un).*confirm|verify/i.test(msg) ||
   /email.*not verified/i.test(msg) ||
@@ -62,6 +120,8 @@ export function LoginForm({ className, ...props }: HTMLAttributes<HTMLDivElement
   const [busy, setBusy] = useState<"pwd" | "send" | "verify" | null>(null);
   const [savedEmail, setSavedEmail] = useState(prefillEmail);
   const [autoOpenedMagic, setAutoOpenedMagic] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const widgetIdRef = useRef<number | null>(null);
 
   const pwdForm = useForm<PwdVals>({
     resolver: zodResolver(pwdSchema),
@@ -98,7 +158,60 @@ export function LoginForm({ className, ...props }: HTMLAttributes<HTMLDivElement
     }, 800);
   };
 
-  /* ---------- password login ----------------------------------- */
+  const resetCaptcha = () => {
+    if (window.grecaptcha && widgetIdRef.current !== null) {
+      window.grecaptcha.reset(widgetIdRef.current);
+    }
+    setCaptchaToken(null);
+  };
+
+  const renderCaptcha = useCallback(async () => {
+    try {
+      const siteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
+      if (!siteKey) throw new Error("Missing reCAPTCHA site key");
+      await loadRecaptchaScript();
+      if (!window.grecaptcha) throw new Error("grecaptcha not available");
+      if (widgetIdRef.current !== null) return; // already rendered
+
+      widgetIdRef.current = window.grecaptcha.render("recaptcha-container", {
+        sitekey: siteKey,
+        callback: (token: string) => {
+          setCaptchaToken(token);
+        },
+        "expired-callback": () => {
+          setCaptchaToken(null);
+        },
+        size: "normal",
+      });
+    } catch (e) {
+      // fallback logging
+      // eslint-disable-next-line no-console
+      console.error("Captcha render failed", e);
+      toast.error("Failed to load CAPTCHA. Please refresh."); // user feedback
+    }
+  }, []);
+
+  useEffect(() => {
+    if (stage === "magicEmail" || stage === "otp") {
+      renderCaptcha();
+    }
+  }, [stage, renderCaptcha]);
+
+  const verifyCaptcha = async (token: string): Promise<boolean> => {
+    try {
+      const res = await fetch("/api/verify-recaptcha", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+      const data = (await res.json()) as { success: boolean };
+      return data.success === true;
+    } catch {
+      return false;
+    }
+  };
+
+  /* ---------- password login ---------- */
   const loginWithPassword = async (values: PwdVals) => {
     setBusy("pwd");
     const { data, error } = await supabase.auth.signInWithPassword(values);
@@ -125,15 +238,25 @@ export function LoginForm({ className, ...props }: HTMLAttributes<HTMLDivElement
     showPostLoaderThenRedirect();
   };
 
-  /* ---------- magic code login flow ---------------------------- */
+  /* ---------- magic code login flow ---------- */
   const startMagicLogin = () => {
     setStage("magicEmail");
   };
 
-  const sendMagicCode = async ({ email }: { email: string }) => {
+  const sendMagicCode = async ({ email }: EmailVals) => {
     if (busy === "send") return;
+    if (!captchaToken) {
+      toast.error("Please complete the CAPTCHA.");
+      return;
+    }
     setBusy("send");
-
+    const valid = await verifyCaptcha(captchaToken);
+    if (!valid) {
+      toast.error("CAPTCHA verification failed.");
+      resetCaptcha();
+      setBusy(null);
+      return;
+    }
     try {
       const { error } = await supabase.auth.signInWithOtp({
         email,
@@ -149,9 +272,7 @@ export function LoginForm({ className, ...props }: HTMLAttributes<HTMLDivElement
           msg.includes("not a valid login")
         ) {
           toast.error("Email not registered. Please sign up first.");
-  
-         } else if (msg.includes("rate")) {
-
+        } else if (msg.includes("rate")) {
           toast.error("Too many attempts. Please wait and try again.");
         } else {
           toast.error(`Failed to send code: ${error.message}`);
@@ -165,18 +286,32 @@ export function LoginForm({ className, ...props }: HTMLAttributes<HTMLDivElement
     } catch {
       toast.error("Unexpected error sending code.");
     } finally {
+      resetCaptcha();
       setBusy(null);
     }
   };
 
   const verifyOtp = async (values: OtpVals) => {
+    if (!captchaToken) {
+      toast.error("Please complete the CAPTCHA.");
+      return;
+    }
     setBusy("verify");
+    const valid = await verifyCaptcha(captchaToken);
+    if (!valid) {
+      toast.error("CAPTCHA verification failed.");
+      resetCaptcha();
+      setBusy(null);
+      return;
+    }
+
     const { data, error } = await supabase.auth.verifyOtp({
       email: savedEmail,
       token: values.code,
       type: "email",
     });
     setBusy(null);
+    resetCaptcha();
 
     if (error) {
       toast.error("Invalid or expired code.");
@@ -207,7 +342,6 @@ export function LoginForm({ className, ...props }: HTMLAttributes<HTMLDivElement
         showPostLoaderThenRedirect();
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -289,7 +423,7 @@ export function LoginForm({ className, ...props }: HTMLAttributes<HTMLDivElement
       {stage === "magicEmail" && (
         <Form {...magicEmailForm}>
           <form
-            onSubmit={magicEmailForm.handleSubmit((v) => sendMagicCode({ email: v.email }))}
+            onSubmit={magicEmailForm.handleSubmit(sendMagicCode)}
             className="grid gap-4"
           >
             <FormField
@@ -306,7 +440,9 @@ export function LoginForm({ className, ...props }: HTMLAttributes<HTMLDivElement
               )}
             />
 
-            <Button type="submit" disabled={busy === "send"} className="w-full">
+            <div id="recaptcha-container" className="flex justify-center" />
+
+            <Button type="submit" disabled={busy === "send" || !captchaToken} className="w-full">
               {busy === "send" && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Send 6-digit Code
             </Button>
@@ -359,7 +495,13 @@ export function LoginForm({ className, ...props }: HTMLAttributes<HTMLDivElement
               )}
             />
 
-            <Button type="submit" disabled={busy === "verify"} className="w-full">
+            <div id="recaptcha-container" className="flex justify-center" />
+
+            <Button
+              type="submit"
+              disabled={busy === "verify" || !captchaToken}
+              className="w-full"
+            >
               {busy === "verify" && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Verify & Continue
             </Button>
