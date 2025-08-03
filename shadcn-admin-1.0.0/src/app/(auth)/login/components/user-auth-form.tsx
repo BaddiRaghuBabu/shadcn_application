@@ -151,12 +151,14 @@ export function LoginForm({ className, ...props }: HTMLAttributes<HTMLDivElement
     }, 800);
   };
 
-  const showPostLoaderThenRedirect = async () => {
+  const showPostLoaderThenRedirect = useCallback(() => {
     setStage("postOtpLoader");
     setTimeout(() => {
       router.push("/dashboard");
     }, 800);
-  };
+
+    }, [router]);
+
 
   const resetCaptcha = () => {
     if (window.grecaptcha && widgetIdRef.current !== null) {
@@ -342,7 +344,7 @@ export function LoginForm({ className, ...props }: HTMLAttributes<HTMLDivElement
         showPostLoaderThenRedirect();
       }
     })();
-  }, []);
+  }, [showPostLoaderThenRedirect]);
 
   return (
     <div className={cn("grid gap-6", className)} {...props}>

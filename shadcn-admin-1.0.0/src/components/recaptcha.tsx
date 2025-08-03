@@ -2,17 +2,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 
-declare global {
-  interface Window {
-    grecaptcha?: {
-      render: (
-        container: HTMLElement,
-        parameters: { sitekey: string; callback: (token: string) => void }
-      ) => number;
-      reset: (id: number) => void;
-    };
-  }
-}
+
 
 export interface RecaptchaHandle {
   reset: () => void;
@@ -41,7 +31,7 @@ const Recaptcha = forwardRef<RecaptchaHandle, RecaptchaProps>(({ onChange }, ref
     }
 
     const render = () => {
-      if (!divRef.current) return;
+      if (!divRef.current || !window.grecaptcha) return;
       widgetIdRef.current = window.grecaptcha.render(divRef.current, {
         sitekey: siteKey,
         callback: (token: string) => onChange(token),
