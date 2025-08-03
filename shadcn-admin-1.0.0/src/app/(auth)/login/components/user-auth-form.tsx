@@ -156,9 +156,7 @@ export function LoginForm({ className, ...props }: HTMLAttributes<HTMLDivElement
     setTimeout(() => {
       router.push("/dashboard");
     }, 800);
-
-    }, [router]);
-
+  }, [router]);
 
   const resetCaptcha = () => {
     if (window.grecaptcha && widgetIdRef.current !== null) {
@@ -173,8 +171,10 @@ export function LoginForm({ className, ...props }: HTMLAttributes<HTMLDivElement
       if (!siteKey) throw new Error("Missing reCAPTCHA site key");
       await loadRecaptchaScript();
       if (!window.grecaptcha) throw new Error("grecaptcha not available");
-      if (widgetIdRef.current !== null) return; // already rendered
-
+      if (widgetIdRef.current !== null) {
+        window.grecaptcha.reset(widgetIdRef.current);
+        widgetIdRef.current = null;
+      }
       widgetIdRef.current = window.grecaptcha.render("recaptcha-container", {
         sitekey: siteKey,
         callback: (token: string) => {
@@ -186,7 +186,6 @@ export function LoginForm({ className, ...props }: HTMLAttributes<HTMLDivElement
         size: "normal",
       });
     } catch (e) {
-      // fallback logging
       // eslint-disable-next-line no-console
       console.error("Captcha render failed", e);
       toast.error("Failed to load CAPTCHA. Please refresh."); // user feedback
@@ -194,8 +193,10 @@ export function LoginForm({ className, ...props }: HTMLAttributes<HTMLDivElement
   }, []);
 
   useEffect(() => {
-    if (stage === "magicEmail" || stage === "otp") {
+    if (stage === "magicEmail") {
       renderCaptcha();
+    } else {
+      setCaptchaToken(null);
     }
   }, [stage, renderCaptcha]);
 
@@ -279,6 +280,7 @@ export function LoginForm({ className, ...props }: HTMLAttributes<HTMLDivElement
         } else {
           toast.error(`Failed to send code: ${error.message}`);
         }
+        setBusy(null);
         return;
       }
 
@@ -294,26 +296,13 @@ export function LoginForm({ className, ...props }: HTMLAttributes<HTMLDivElement
   };
 
   const verifyOtp = async (values: OtpVals) => {
-    if (!captchaToken) {
-      toast.error("Please complete the CAPTCHA.");
-      return;
-    }
     setBusy("verify");
-    const valid = await verifyCaptcha(captchaToken);
-    if (!valid) {
-      toast.error("CAPTCHA verification failed.");
-      resetCaptcha();
-      setBusy(null);
-      return;
-    }
-
     const { data, error } = await supabase.auth.verifyOtp({
       email: savedEmail,
       token: values.code,
       type: "email",
     });
     setBusy(null);
-    resetCaptcha();
 
     if (error) {
       toast.error("Invalid or expired code.");
@@ -424,10 +413,7 @@ export function LoginForm({ className, ...props }: HTMLAttributes<HTMLDivElement
       {/* MAGIC EMAIL ENTRY */}
       {stage === "magicEmail" && (
         <Form {...magicEmailForm}>
-          <form
-            onSubmit={magicEmailForm.handleSubmit(sendMagicCode)}
-            className="grid gap-4"
-          >
+          <form onSubmit={magicEmailForm.handleSubmit(sendMagicCode)} className="grid gap-4">
             <FormField
               control={magicEmailForm.control}
               name="email"
@@ -442,7 +428,7 @@ export function LoginForm({ className, ...props }: HTMLAttributes<HTMLDivElement
               )}
             />
 
-            <div id="recaptcha-container" className="flex justify-center" />
+            <div id="recaptcha-container" className="" />
 
             <Button type="submit" disabled={busy === "send" || !captchaToken} className="w-full">
               {busy === "send" && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -497,11 +483,9 @@ export function LoginForm({ className, ...props }: HTMLAttributes<HTMLDivElement
               )}
             />
 
-            <div id="recaptcha-container" className="flex justify-center" />
-
             <Button
               type="submit"
-              disabled={busy === "verify" || !captchaToken}
+              disabled={busy === "verify"}
               className="w-full"
             >
               {busy === "verify" && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
