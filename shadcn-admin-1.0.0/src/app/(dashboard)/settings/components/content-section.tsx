@@ -1,18 +1,21 @@
-import { cn } from "@/lib/utils"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Separator } from "@/components/ui/separator"
+import { cn } from "@/lib/utils";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import type { ReactNode } from "react";
+
+interface ContentSectionProps {
+  title: string;
+  desc: string;
+  children: ReactNode;
+  className?: string;
+}
 
 export default function ContentSection({
   title,
   desc,
   children,
   className,
-}: {
-  title: string
-  desc: string
-  children: React.JSX.Element
-  className?: string
-}) {
+}: ContentSectionProps) {
   return (
     <div className="flex flex-1 flex-col">
       <div className="flex-none">
@@ -26,5 +29,5 @@ export default function ContentSection({
         </div>
       </ScrollArea>
     </div>
-  )
+  );
 }

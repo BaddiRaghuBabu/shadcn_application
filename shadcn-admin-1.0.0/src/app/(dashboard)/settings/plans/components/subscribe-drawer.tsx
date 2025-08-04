@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { z } from "zod"
 import { format } from "date-fns"
 import { useForm } from "react-hook-form"
@@ -59,6 +60,8 @@ const formSchema = z.object({
 
 export default function SubscribeDrawer({ plan }: Props) {
   const [countries, setCountries] = useState<CountryRegion[]>([])
+    const router = useRouter()
+
 
   useEffect(() => {
     setCountries(filterCountries(countryRegionData, [], [], []))
@@ -73,6 +76,9 @@ export default function SubscribeDrawer({ plan }: Props) {
 
   function onSubmit(values: z.infer<typeof formSchema>) {
     nofitySubmittedValues(values)
+        router.push(
+      `/settings/billing?plan=${plan.label}&priceId=${plan.priceId}`
+    )
   }
 
   return (

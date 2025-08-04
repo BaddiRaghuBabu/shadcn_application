@@ -5,6 +5,8 @@ const monthlyPlan = {
   price: 49.99,
   content: "$49.99 / month",
   description: "Billed monthly",
+  priceId: process.env.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID!,
+
   overview:
     "Experience all the core features with the flexibility of a monthly subscription. Stay up-to-date with the latest tools, receive ongoing support, and enjoy uninterrupted access to key functionalities designed to enhance your productivity.",
   features: [
@@ -26,6 +28,8 @@ const annualPlan = {
   content: "$41.40 / month",
   badge: "Save %100",
   description: "$499.99 yearly",
+  priceId: process.env.NEXT_PUBLIC_STRIPE_ANNUAL_PRICE_ID!,
+
   overview:
     "Unlock maximum value and savings with our annual plan. Enjoy all the features of the Monthly plan plus exclusive benefits tailored for long-term users. Get priority access to new tools, enhanced support, and personalized assistance from a dedicated account manager to ensure you reach your goals with ease.",
   features: [
@@ -48,6 +52,8 @@ const lifetimesPlan = {
   content: "$899.99",
   price: 899.99,
   description: "1x Billed",
+  priceId: process.env.NEXT_PUBLIC_STRIPE_LIFETIME_PRICE_ID!,
+
   overview:
     "Enjoy lifelong access to all features with a one-time payment. Get priority support, exclusive updates, and unlimited data storage – all without worrying about recurring fees. Maximize your value and future-proof your experience.",
   features: [

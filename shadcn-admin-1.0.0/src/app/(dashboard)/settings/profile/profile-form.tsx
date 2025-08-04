@@ -1,4 +1,3 @@
-// components/account-form.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -67,8 +66,10 @@ type AccountFormValues = z.infer<typeof accountFormSchema>;
 
 const defaultValues: Partial<AccountFormValues> = {
   name: "",
-  dob: new Date("2023-01-23"),
+  username: "",
   email: "",
+  dob: new Date("2023-01-23"),
+  language: "en", // give a default so it's controlled
 };
 
 type ProfileUpdatePayload = {
@@ -114,8 +115,8 @@ export function AccountForm() {
           email,
           username: profile.username ?? "",
           name: profile.name ?? "",
-          dob: profile.dob ? new Date(profile.dob) : undefined,
-          language: profile.language ?? "",
+          dob: profile.dob ? new Date(profile.dob) : new Date("2023-01-23"),
+          language: profile.language ?? "en",
         } as Partial<AccountFormValues>);
       }
     }
