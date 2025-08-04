@@ -1,5 +1,4 @@
 import {
-  IconApps,
   IconBarrierBlock,
   IconBug,
   IconChecklist,
@@ -149,12 +148,6 @@ export const sidebarData: SidebarData = {
               icon: IconChecklist,
               url: "/settings/plans",
             },
-            {
-              title: "Connected Apps",
-              icon: IconApps,
-              url: "/settings/connected-apps",
-            },
-
             {
               title: "Notifications",
               icon: IconNotification,

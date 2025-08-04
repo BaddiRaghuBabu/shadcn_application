@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
-import { getOrSetDeviceId } from "@/lib/device";
+import { getOrSetDeviceId, clearDeviceId } from "@/lib/device";
 import type { Session } from "@supabase/supabase-js";
 
 export function useRequireAuth() {
@@ -87,6 +87,9 @@ export function useRequireAuth() {
         (payload: ForceLogoutPayload) => {
           const currentDevice = getOrSetDeviceId();
           if (!payload?.device_id || payload.device_id === currentDevice) {
+            // remove the stored device identifier so a new one will be
+            // generated on the next login attempt
+            clearDeviceId();
             void supabase.auth.signOut();
             router.replace("/login");
           }

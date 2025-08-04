@@ -1,11 +1,9 @@
 import {
-  IconApps,
   IconChecklist,
   IconCoin,
   IconNotification,
   IconTool,
   IconUser,
-  IconDevicesPc,
   IconLock,
 
 
@@ -39,16 +37,7 @@ const sidebarNavItems = [
     icon: <IconChecklist />,
     href: "/settings/plans",
   },
-  {
-    title: "Connected Apps",
-    icon: <IconApps />,
-    href: "/settings/connected-apps",
-  },
-    {
-    title: "Connected Devices",
-    icon: <IconDevicesPc />,
-    href: "/settings/devices",
-  },
+  
   {
     title: "Notifications",
     icon: <IconNotification />,
