@@ -24,6 +24,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import RazorpayButton from "./razorpay-button"
+
 
 const formSchema = z.object({
   username: z.string().min(1, {
@@ -282,6 +284,8 @@ export default function BillingForm() {
           Continue
         </Button>
       </form>
+        <RazorpayButton />
+
     </Form>
   )
 }
