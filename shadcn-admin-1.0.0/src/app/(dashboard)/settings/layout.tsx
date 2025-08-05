@@ -26,8 +26,6 @@ const sidebarNavItems = [
     icon: <IconLock />,
     href: "/settings/password",
   },
-  
-  
   {
     title: "Notifications",
     icon: <IconNotification />,
