@@ -1,4 +1,3 @@
-import { IconBrandMastercard, IconBrandVisa } from "@tabler/icons-react"
 
 const monthlyPlan = {
   label: "Monthly" as const,
@@ -77,17 +76,4 @@ export const getPlan = new Map<PlanType, Plan>([
   ["Lifeftimes", lifetimesPlan],
 ])
 
-export const paymentAcc = [
-  {
-    name: "Bobby Weelar",
-    card: 88931789,
-    type: "visa",
-    icon: IconBrandVisa,
-  },
-  {
-    name: "Bobby Weelar",
-    card: 33249182,
-    type: "mastercard",
-    icon: IconBrandMastercard,
-  },
-] as const
+
