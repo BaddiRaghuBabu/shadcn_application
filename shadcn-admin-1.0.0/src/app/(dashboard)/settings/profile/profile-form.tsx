@@ -1,182 +1,120 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { z } from "zod";
-import { format } from "date-fns";
 import { useForm } from "react-hook-form";
-import { IconCalendarMonth, IconCheck, IconSelector } from "@tabler/icons-react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
 import { supabase } from "@/lib/supabaseClient";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { toast, Toaster } from "sonner";
 
-const languages = [
-  { label: "English", value: "en" },
-  { label: "French", value: "fr" },
-  { label: "German", value: "de" },
-  { label: "Spanish", value: "es" },
-  { label: "Portuguese", value: "pt" },
-  { label: "Russian", value: "ru" },
-  { label: "Japanese", value: "ja" },
-  { label: "Korean", value: "ko" },
-  { label: "Chinese", value: "zh" },
-] as const;
+const DOB_REGEX = /^\s*(\d{1,2})\/(\d{1,2})\/(\d{4})\s*$/;
+const AGE_CUTOFF = (() => {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - 18);
+  return d;
+})();
 
-const accountFormSchema = z.object({
-  username: z
-    .string()
-    .min(2, { message: "Username must be at least 2 characters." })
-    .max(30, { message: "Username must not be longer than 30 characters." }),
-  email: z
-    .string({ required_error: "Please select an email to display." })
-    .email(),
-  name: z
-    .string()
-    .min(2, { message: "Name must be at least 2 characters." })
-    .max(30, { message: "Name must not be longer than 30 characters." }),
-  dob: z.date({ required_error: "A date of birth is required." }),
-  language: z.string({ required_error: "Please select a language." }),
-});
+const schema = z
+  .object({
+    name: z.string().min(2, "Name is required").max(30),
+    username: z.string().min(2, "Username is required").max(30),
+    email: z.string().email(),
+    dob: z
+      .string()
+      .regex(DOB_REGEX, "Must be DD/MM/YYYY")
+      .superRefine((val, ctx) => {
+        const [, dd, mm, yyyy] = val.match(DOB_REGEX)!;
+        const day = +dd,
+          month = +mm,
+          year = +yyyy;
+        const date = new Date(year, month - 1, day);
+        if (
+          date.getFullYear() !== year ||
+          date.getMonth() !== month - 1 ||
+          date.getDate() !== day
+        ) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["dob"], message: "Invalid date" });
+          return;
+        }
+        if (date > AGE_CUTOFF) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["dob"], message: "Must be at least 18" });
+        }
+      }),
+    language: z.string(),
+  });
 
-type AccountFormValues = z.infer<typeof accountFormSchema>;
-
-const defaultValues: Partial<AccountFormValues> = {
-  name: "",
-  username: "",
-  email: "",
-  dob: new Date("2023-01-23"),
-  language: "en", // give a default so it's controlled
-};
-
-type ProfileUpdatePayload = {
-  username: string;
-  name: string;
-  language: string;
-  dob: string | null;
-};
+type FormValues = z.infer<typeof schema>;
 
 export function AccountForm() {
-  const [showMessage, setShowMessage] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const form = useForm<AccountFormValues>({
-    resolver: zodResolver(accountFormSchema),
-    defaultValues,
+  const form = useForm<FormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: { name: "", username: "", email: "", dob: "", language: "en" },
     mode: "onTouched",
   });
 
   useEffect(() => {
-    let mounted = true;
-
-    async function loadProfile() {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const email = session.user.email ?? "";
-      form.setValue("email", email);
-
+      form.setValue("email", session.user.email!);
       const res = await fetch("/api/profile", {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          "Content-Type": "application/json",
-        },
+        headers: { Authorization: `Bearer ${session.access_token}` },
       });
-      if (!mounted) return;
-      if (res.ok) {
-        const payload = await res.json();
-        const profile = payload?.profile ?? {};
+      if (!res.ok) return;
 
-        form.reset({
-          email,
-          username: profile.username ?? "",
-          name: profile.name ?? "",
-          dob: profile.dob ? new Date(profile.dob) : new Date("2023-01-23"),
-          language: profile.language ?? "en",
-        } as Partial<AccountFormValues>);
+      const { profile } = await res.json();
+      if (profile) {
+        form.setValue("name", profile.name || "");
+        form.setValue("username", profile.username || "");
+        form.setValue("language", profile.language || "en");
+        if (profile.dob) {
+          const d = new Date(profile.dob);
+          const dd = String(d.getDate()).padStart(2, "0");
+          const mm = String(d.getMonth() + 1).padStart(2, "0");
+          const yyyy = d.getFullYear();
+          form.setValue("dob", `${dd}/${mm}/${yyyy}`);
+        }
       }
-    }
-
-    loadProfile();
-
-    return () => {
-      mounted = false;
-    };
+    })();
   }, [form]);
 
-  async function onSubmit(data: AccountFormValues) {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    if (!session) return;
+  const onSubmit = async (data: FormValues) => {
+    const [, dd, mm, yyyy] = data.dob.match(DOB_REGEX)!;
+    const iso = new Date(+yyyy, +mm - 1, +dd).toISOString().split("T")[0];
 
-    const payload: ProfileUpdatePayload = {
-      username: data.username,
-      name: data.name,
-      language: data.language,
-      dob: data.dob ? data.dob.toISOString().split("T")[0] : null,
-    };
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
 
     const res = await fetch("/api/profile", {
       method: "PUT",
       headers: {
-        "Content-Type": "application/json",
         Authorization: `Bearer ${session.access_token}`,
+        "Content-Type": "application/json",
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        name: data.name,
+        username: data.username,
+        language: data.language,
+        dob: iso,
+      }),
     });
 
     if (res.ok) {
-      setErrorMessage(null);
-      setShowMessage(true);
-      setTimeout(() => setShowMessage(false), 3000);
+      toast.success("Profile updated!");
     } else {
-      setShowMessage(false);
-      setErrorMessage("Failed to update profile.");
-      setTimeout(() => setErrorMessage(null), 3000);
+      toast.error("Update failed");
     }
-  }
+  };
 
   return (
-    <div className="relative">
-      {showMessage && (
-        <div className="fixed top-4 right-4 z-50 rounded-md border bg-white px-4 py-2 shadow">
-          <p className="m-0 text-sm font-medium">Updated</p>
-        </div>
-      )}
-      {errorMessage && (
-        <div className="fixed top-4 right-4 z-50 rounded-md border border-red-300 bg-red-50 px-4 py-2 shadow">
-          <p className="m-0 text-sm font-medium text-red-700">
-            {errorMessage}
-          </p>
-        </div>
-      )}
+    <>
+      <Toaster position="bottom-right" />
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           <FormField
             control={form.control}
             name="name"
@@ -186,14 +124,11 @@ export function AccountForm() {
                 <FormControl>
                   <Input placeholder="Your name" {...field} />
                 </FormControl>
-                <FormDescription>
-                  This is the name that will be displayed on your profile and in
-                  emails.
-                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
           />
+
           <FormField
             control={form.control}
             name="username"
@@ -201,16 +136,13 @@ export function AccountForm() {
               <FormItem>
                 <FormLabel>Username</FormLabel>
                 <FormControl>
-                  <Input placeholder="shadcn" {...field} />
+                  <Input placeholder="Username" {...field} />
                 </FormControl>
-                <FormDescription>
-                  This is your public display name. It can be your real name or a
-                  pseudonym. You can only change this once every 30 days.
-                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
           />
+
           <FormField
             control={form.control}
             name="email"
@@ -218,125 +150,30 @@ export function AccountForm() {
               <FormItem>
                 <FormLabel>Email</FormLabel>
                 <FormControl>
-                  <Input {...field} readOnly />
+                  <Input readOnly {...field} />
                 </FormControl>
-                <FormDescription>
-                  This email comes from Supabase Auth and cannot be changed here.
-                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
           />
+
           <FormField
             control={form.control}
             name="dob"
             render={({ field }) => (
-              <FormItem className="flex flex-col">
+              <FormItem>
                 <FormLabel>Date of birth</FormLabel>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <FormControl>
-                      <Button
-                        variant={"outline"}
-                        className={cn(
-                          "w-60 pl-3 text-left font-normal",
-                          !field.value && "text-muted-foreground"
-                        )}
-                      >
-                        {field.value ? (
-                          format(field.value, "MMM d, yyyy")
-                        ) : (
-                          <span>Pick a date</span>
-                        )}
-                        <IconCalendarMonth className="ml-auto h-4 w-4 opacity-50" />
-                      </Button>
-                    </FormControl>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={field.value}
-                      onSelect={field.onChange}
-                      disabled={(date: Date) =>
-                        date > new Date() || date < new Date("1900-01-01")
-                      }
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-                <FormDescription>
-                  Your date of birth is used to calculate your age.
-                </FormDescription>
+                <FormControl>
+                  <Input placeholder="DD/MM/YYYY" {...field} />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
-          <FormField
-            control={form.control}
-            name="language"
-            render={({ field }) => (
-              <FormItem className="flex flex-col">
-                <FormLabel>Language</FormLabel>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <FormControl>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        className={cn(
-                          "w-[200px] justify-between",
-                          !field.value && "text-muted-foreground"
-                        )}
-                      >
-                        {field.value
-                          ? languages.find(
-                              (language) => language.value === field.value
-                            )?.label
-                          : "Select language"}
-                        <IconSelector className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </FormControl>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[200px] p-0">
-                    <Command>
-                      <CommandInput placeholder="Search language..." />
-                      <CommandEmpty>No language found.</CommandEmpty>
-                      <CommandGroup>
-                        <CommandList>
-                          {languages.map((language) => (
-                            <CommandItem
-                              value={language.label}
-                              key={language.value}
-                              onSelect={() => {
-                                form.setValue("language", language.value);
-                              }}
-                            >
-                              <IconCheck
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  language.value === field.value
-                                    ? "opacity-100"
-                                    : "opacity-0"
-                                )}
-                              />
-                              {language.label}
-                            </CommandItem>
-                          ))}
-                        </CommandList>
-                      </CommandGroup>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-                <FormDescription>
-                  This is the language that will be used in the dashboard.
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+
           <Button type="submit">Update account</Button>
         </form>
       </Form>
-    </div>
+    </>
   );
 }

@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { BadgeCheck, Bell, CreditCard, PowerOff, ChevronsUpDown } from "lucide-react";
+import { BadgeCheck, Bell, PowerOff, ChevronsUpDown } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -160,12 +160,7 @@ export function NavUser({ user }: Props) {
                   Profile
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href="/settings/billing">
-                  <CreditCard />
-                  Billing
-                </Link>
-              </DropdownMenuItem>
+  
               <DropdownMenuItem asChild>
                 <Link href="/settings/notifications">
                   <Bell className="mr-2 size-4" />
