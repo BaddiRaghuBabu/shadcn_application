@@ -8,7 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 // @ts-expect-error: the library doesn't support d.ts
 import countryRegionData from "country-region-data/dist/data-umd"
 import { CountryRegion, filterCountries } from "@/lib/filter-countries"
-import { nofitySubmittedValues } from "@/lib/notify-submitted-values"
+import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
 import {
   Form,
@@ -22,6 +22,31 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Plan } from "../data/data"
 import { X } from "lucide-react"
+
+interface RazorpayResponse {
+  razorpay_order_id: string
+  razorpay_payment_id: string
+  razorpay_signature: string
+}
+
+interface RazorpayOptions {
+  key: string
+  amount: number
+  currency: string
+  name: string
+  description: string
+  order_id: string
+  prefill: { name: string }
+  handler: (response: RazorpayResponse) => Promise<void>
+  modal: { ondismiss: () => Promise<void> }
+}
+
+declare global {
+  interface Window {
+    Razorpay: new (options: RazorpayOptions) => { open: () => void }
+  }
+}
+
 
 interface Props {
   plan: Plan
@@ -54,9 +79,90 @@ export default function SubscribeModal({ plan }: Props) {
     },
   })
 
-  const onSubmit = (values: FormValues) => {
-    nofitySubmittedValues(values)
-    setOpen(false)
+   useEffect(() => {
+    if (typeof window !== "undefined" && !window.Razorpay) {
+      const script = document.createElement("script")
+      script.src = "https://checkout.razorpay.com/v1/checkout.js"
+      script.async = true
+      document.body.appendChild(script)
+      return () => {
+        document.body.removeChild(script)
+      }
+    }
+  }, [])
+
+  const onSubmit = async (values: FormValues) => {
+    try {
+      const { data: session } = await supabase.auth.getSession()
+      const token = session.session?.access_token
+      if (!token) {
+        throw new Error("Not authenticated")
+      }
+
+      const amount = Math.round(plan.price * 100)
+      const res = await fetch("/api/razorpay/order", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          plan_id: plan.label,
+          amount,
+          currency: "INR",
+          name: values.name,
+          address: values.address,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to create order")
+      }
+
+      const options: RazorpayOptions = {
+        key: data.key,
+        amount: data.order.amount,
+        currency: data.order.currency,
+        name: "Subscription",
+        description: plan.label,
+        order_id: data.order.id,
+        prefill: {
+          name: values.name,
+        },
+        handler: async function (response: RazorpayResponse) {
+          await fetch("/api/razorpay/verify", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              paymentId: data.paymentId,
+              ...response,
+            }),
+          })
+        },
+        modal: {
+          ondismiss: async () => {
+            await fetch("/api/razorpay/verify", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({ paymentId: data.paymentId, failed: true }),
+            })
+          },
+        },
+      }
+
+      const rzp = new window.Razorpay(options)
+      rzp.open()
+      setOpen(false)
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(err)
+    }
   }
 
   return (
