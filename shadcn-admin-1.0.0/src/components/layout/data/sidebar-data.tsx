@@ -139,14 +139,9 @@ export const sidebarData: SidebarData = {
               url: "/settings/password",
             },
             {
-              title: "Billing",
+              title: "Subscription",
               icon: IconCoin,
-              url: "/settings/billing",
-            },
-            {
-              title: "Plans",
-              icon: IconChecklist,
-              url: "/settings/plans",
+              url: "/subscribe",
             },
             {
               title: "Notifications",

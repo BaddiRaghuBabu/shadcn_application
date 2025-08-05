@@ -5,6 +5,9 @@ create table if not exists payments (
   plan_id text not null,
   amount integer not null,
   currency text not null default 'INR',
+  full_name text,
+  address text,
+  phone text,
   status text not null default 'pending', -- pending | success | failed
   razorpay_order_id text unique,
   razorpay_payment_id text,

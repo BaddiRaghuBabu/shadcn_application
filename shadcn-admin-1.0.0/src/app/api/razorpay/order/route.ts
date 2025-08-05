@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/supabaseClient";
-import { getPlan, PlanType } from "@/app/(dashboard)/settings/plans/data/data";
 import { createOrder } from "@/lib/razorpay";
+import { getPlan, PlanType } from "@/data/plans";
 
 const supabaseAdmin = getSupabaseAdminClient();
 

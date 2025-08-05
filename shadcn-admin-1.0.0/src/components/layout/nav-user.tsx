@@ -161,9 +161,10 @@ export function NavUser({ user }: Props) {
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href="/settings/billing">
+                <Link href="/subscribe">
                   <CreditCard className="mr-2 size-4" />
-                  Billing
+                 Subscription
+
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
