@@ -1,9 +1,9 @@
 import {
   IconBarrierBlock,
+  IconCoin,
   IconBug,
   IconChecklist,
   IconCode,
-  IconCoin,
   IconError404,
   IconLayoutDashboard,
   IconLock,
@@ -138,11 +138,17 @@ export const sidebarData: SidebarData = {
               icon: IconLock,
               url: "/settings/password",
             },
-            {
-              title: "Subscription",
-              icon: IconCoin,
-              url: "/subscribe",
+              {
+              title: "Plans",
+              icon: IconChecklist,
+              url: "/settings/plans",
             },
+                        {
+              title: "Billing",
+              icon: IconCoin,
+              url: "/settings/billing",
+            },
+
             {
               title: "Notifications",
               icon: IconNotification,
