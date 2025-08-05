@@ -1,7 +1,6 @@
 "use client";
 
 import Script from "next/script";
-import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 
@@ -13,9 +12,12 @@ declare global {
   }
 }
 
-export default function RazorpayButton() {
-  const params = useSearchParams();
-  const plan = params.get("plan") ?? "Monthly";
+interface Props {
+  plan: string;
+  amount: number;
+}
+
+export default function RazorpayButton({ plan, amount }: Props) {
 
   async function handlePay() {
     const {
@@ -29,7 +31,7 @@ export default function RazorpayButton() {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ plan }),
+      body: JSON.stringify({ plan, amount }),
     });
     const order = await orderRes.json();
 

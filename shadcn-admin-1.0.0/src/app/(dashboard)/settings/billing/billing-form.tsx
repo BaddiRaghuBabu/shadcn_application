@@ -4,7 +4,8 @@ import { z } from "zod"
 import { useForm } from "react-hook-form"
 import { IconApple, IconBrandPaypal } from "@tabler/icons-react"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { nofitySubmittedValues } from "@/lib/notify-submitted-values"
+import { useMemo } from "react"
+import { toast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import {
   Form,
@@ -26,6 +27,11 @@ import {
 } from "@/components/ui/select"
 import RazorpayButton from "./razorpay-button"
 
+const plans = [
+  { value: "monthly", label: "Monthly", amount: 1000 },
+  { value: "annual", label: "Annual (Save 100%)", amount: 10000 },
+  { value: "lifetime", label: "Lifetime", amount: 50000 },
+]
 
 const formSchema = z.object({
   username: z.string().min(1, {
@@ -49,6 +55,9 @@ const formSchema = z.object({
   cv: z.string().min(1, {
     message: "Cv is required.",
   }),
+    plan: z.enum(["monthly", "annual", "lifetime"], {
+    required_error: "Plan is required.",
+  }),
 })
 
 export default function BillingForm() {
@@ -60,47 +69,79 @@ export default function BillingForm() {
       card_number: "",
       cv: "",
       payment_method: "Card",
+      plan: "monthly",
+
     },
+    
   })
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    nofitySubmittedValues(values)
+  const planValue = form.watch("plan")
+  const selectedPlan = useMemo(
+    () => plans.find((p) => p.value === planValue)!,
+    [planValue]
+  )
+
+  function onSubmit() {
+    toast({
+      title: "Billing details saved",
+      description: `${selectedPlan.label} - ₹${(selectedPlan.amount / 100).toFixed(2)}`,
+    })
   }
 
   return (
-    <Form {...form}>
+      <Form {...form}>
       <form
         onSubmit={form.handleSubmit(onSubmit)}
         className="mb-4xx grid grid-cols-6 gap-5"
       >
-        <FormField
+            <FormField
           control={form.control}
-          name="username"
+          name="plan"
           render={({ field }) => (
-            <FormItem className="col-span-6 md:col-span-3">
-              <FormLabel>Username</FormLabel>
+            <FormItem className="col-span-6">
+              <FormLabel>Plan</FormLabel>
               <FormControl>
-                <Input placeholder="Enter username" {...field} />
+                <RadioGroup
+                  onValueChange={field.onChange}
+                  value={field.value}
+                  className="grid grid-cols-3 gap-4"
+                >
+                  {plans.map((plan) => (
+                    <FormItem key={plan.value} className="col-span-1 flex items-center">
+                      <FormControl>
+                        <RadioGroupItem
+                          value={plan.value}
+                          id={plan.value}
+                          className="peer sr-only"
+                          aria-label={plan.label}
+                        />
+                      </FormControl>
+                      <FormLabel
+                        htmlFor={plan.value}
+                        className="border-muted hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary flex flex-1 flex-col items-center justify-between rounded-md border-2 bg-transparent p-4"
+                      >
+                        {plan.label}
+                        <span className="mt-1 text-sm font-normal">
+                          ₹{(plan.amount / 100).toFixed(2)}
+                        </span>
+                      </FormLabel>
+                    </FormItem>
+                  ))}
+                </RadioGroup>
               </FormControl>
-              <FormDescription>This is your username.</FormDescription>
               <FormMessage />
             </FormItem>
           )}
         />
-        <FormField
-          control={form.control}
-          name="city"
-          render={({ field }) => (
-            <FormItem className="col-span-6 md:col-span-3">
-              <FormLabel>City</FormLabel>
-              <FormControl>
-                <Input placeholder="Enter City" {...field} />
-              </FormControl>
-              <FormDescription>This is your city name.</FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+
+        <div className="col-span-6 rounded-md border p-4">
+          <h3 className="mb-2 text-sm font-medium">Checkout Summary</h3>
+          <div className="flex items-center justify-between text-sm">
+            <span>{selectedPlan.label}</span>
+            <span>₹{(selectedPlan.amount / 100).toFixed(2)}</span>
+          </div>
+        </div>
+        
         <FormField
           control={form.control}
           name="payment_method"
@@ -284,8 +325,7 @@ export default function BillingForm() {
           Continue
         </Button>
       </form>
-        <RazorpayButton />
-
+    <RazorpayButton plan={selectedPlan.label} amount={selectedPlan.amount} />
     </Form>
   )
 }
