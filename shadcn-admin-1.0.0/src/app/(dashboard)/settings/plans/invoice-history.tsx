@@ -1,56 +1,57 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
-import { format } from "date-fns";
-import { supabase } from "@/lib/supabaseClient";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { useEffect, useState, useMemo } from "react"
+import { format } from "date-fns"
+import { FileText, DownloadCloud, ChevronDown } from "lucide-react"
+import { supabase } from "@/lib/supabaseClient"
+import { Button } from "@/components/ui/button"
 import {
   Select,
   SelectTrigger,
   SelectContent,
   SelectItem,
   SelectValue,
-} from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
-import { FileText, DownloadCloud, ChevronDown } from "lucide-react";
+} from "@/components/ui/select"
+import { Separator } from "@/components/ui/separator"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Input } from "@/components/ui/input";
 
 interface Payment {
-  id: string;
-  created_at: string;
-  plan_id: string;
-  amount: number;
-  status: "pending" | "success" | "failed";
+  id: string
+  created_at: string
+  plan_id: string
+  amount: number
+  status: "pending" | "success" | "failed"
 }
 
 export default function InvoiceHistory() {
-  const [invoices, setInvoices] = useState<Payment[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [invoices, setInvoices] = useState<Payment[]>([])
+  const [loading, setLoading] = useState(false)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [tab, setTab] = useState<"all" | "success" | "failed" | "pending">(
     "all"
-  );
-  const [search, setSearch] = useState("");
-  const [sortDesc, setSortDesc] = useState(true);
+  )
+  const [search, setSearch] = useState("")
+  const [sortDesc, setSortDesc] = useState(true)
 
   useEffect(() => {
     async function load() {
-      setLoading(true);
+      setLoading(true)
       const { data, error } = await supabase
-        .from<Payment>("payments")
-        .select("id, created_at, plan_id, amount, status");
+         .from("payments")
+        .select("id, created_at, plan_id, amount, status")
+        .returns<Payment[]>()
       if (error) {
         // eslint-disable-next-line no-console
-        console.error("Supabase error:", error.message);
-        setErrorMsg(error.message);
+        console.error("Supabase error:", error.message)
+        setErrorMsg(error.message)
       } else {
-        setInvoices(data);
+        setInvoices(data ?? [])
       }
-      setLoading(false);
+      setLoading(false)
     }
-    load();
-  }, []);
+    load()
+  }, [])
 
   const filtered = useMemo(() => {
     return invoices
@@ -64,20 +65,20 @@ export default function InvoiceHistory() {
         sortDesc
           ? new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
           : new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-      );
-  }, [invoices, tab, search, sortDesc]);
+      )
+  }, [invoices, tab, search, sortDesc])
 
   if (errorMsg) {
     return (
       <div className="p-6 text-red-600">
         <strong>Failed to load invoices:</strong> {errorMsg}
       </div>
-    );
+    )
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
         <h2 className="text-xl font-semibold">Previous invoices</h2>
         <div className="flex items-center space-x-3">
           <Input
@@ -117,14 +118,14 @@ export default function InvoiceHistory() {
 
       <div className="space-y-2">
         {loading ? (
-          <p className="text-center py-8">Loading…</p>
+          <p className="py-8 text-center">Loading…</p>
         ) : filtered.length === 0 ? (
-          <p className="text-center py-8 text-gray-500">No invoices found.</p>
+          <p className="py-8 text-center text-gray-500">No invoices found.</p>
         ) : (
           filtered.map((inv) => (
             <div
               key={inv.id}
-              className="flex items-center justify-between py-3 border-b last:border-none"
+              className="flex items-center justify-between border-b py-3 last:border-none"
             >
               <div className="flex items-center space-x-3">
                 <FileText className="text-gray-400" size={24} />
@@ -149,5 +150,5 @@ export default function InvoiceHistory() {
         )}
       </div>
     </div>
-  );
+  )
 }
