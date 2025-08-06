@@ -4,6 +4,7 @@ create table if not exists user_profiles (
   username text,
   name text,
   dob date,
+  avatar text,
   language text,
   updated_at timestamptz not null default now()
 );

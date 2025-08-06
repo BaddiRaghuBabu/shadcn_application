@@ -21,6 +21,8 @@ const profileSchema = z.object({
   name: z.string().min(2).max(30),
   dob: z.string().optional(),
   language: z.string().optional(),
+  avatar: z.string().optional(),
+
 })
 
 export async function GET(req: Request) {
@@ -31,7 +33,7 @@ export async function GET(req: Request) {
 
   const { data, error } = await supabaseAdmin
     .from("user_profiles")
-    .select("username, name, dob, language")
+    .select("username, name, dob, language, avatar")
     .eq("user_id", user_id)
     .single()
 
@@ -57,7 +59,7 @@ export async function PUT(req: Request) {
     )
   }
 
-  const { username, name, dob, language } = parsed.data
+  const { username, name, dob, language, avatar } = parsed.data
   const { data, error } = await supabaseAdmin
     .from("user_profiles")
     .upsert(
@@ -67,11 +69,13 @@ export async function PUT(req: Request) {
         name,
         dob,
         language,
+        avatar,
+
         updated_at: new Date().toISOString(),
       },
       { onConflict: "user_id" }
     )
-    .select("username, name, dob, language")
+    .select("username, name, dob, language, avatar")
     .single()
 
   if (error) {

@@ -1,4 +1,3 @@
-// components/layout/nav-user.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -6,6 +5,7 @@ import { BadgeCheck, Bell, PowerOff, ChevronsUpDown } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { motion } from "framer-motion";
 
 import { clearDeviceId, getOrSetDeviceId } from "@/lib/device";
 import { supabase } from "@/lib/supabaseClient";
@@ -22,19 +22,54 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
 
-interface Props {
-  user: {
-    name: string;
-    email: string;
-    avatar: string;
-  };
+interface UserProfile {
+  name: string;
+  email: string;
+  avatar: string;
 }
 
-export function NavUser({ user }: Props) {
+// wrap AvatarImage in motion
+const MotionAvatarImage = motion(AvatarImage);
+
+export function NavUser() {
   const { isMobile } = useSidebar();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [sessionValid, setSessionValid] = useState(true);
+  const [user, setUser] = useState<UserProfile | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const {
+          data: { user: authUser },
+        } = await supabase.auth.getUser();
+        if (!authUser) return;
+
+        let name = authUser.user_metadata?.full_name ?? "";
+        let avatar = authUser.user_metadata?.avatar_url ?? "";
+
+        const { data: profile } = await supabase
+          .from("user_profiles")
+          .select("name, avatar")
+          .eq("user_id", authUser.id)
+          .single();
+
+        if (profile) {
+          name = profile.name ?? name;
+          avatar = profile.avatar ?? avatar;
+        }
+
+        setUser({
+          name: name || authUser.email || "User",
+          email: authUser.email || "",
+          avatar: avatar || `https://i.pravatar.cc/150?u=${authUser.id}`,
+        });
+      } catch {
+        toast.error("Failed to load profile");
+      }
+    })();
+  }, []);
 
   // keep session fresh / detect expired session
   useEffect(() => {
@@ -48,7 +83,7 @@ export function NavUser({ user }: Props) {
           setSessionValid(false);
           router.replace("/login");
         }
-      } catch (_err) {
+      } catch {
         toast.error("Connection to auth backend unstable. Retrying...");
       }
     }, 30000);
@@ -97,14 +132,14 @@ export function NavUser({ user }: Props) {
       clearDeviceId();
       toast.success("Logged out on this device");
       router.replace("/login");
-    } catch (_err) {
+    } catch {
       toast.error("Unexpected error during logout");
     } finally {
       setLoading(false);
     }
   };
 
-  if (!sessionValid) {
+  if (!sessionValid || !user) {
     return null;
   }
 
@@ -119,15 +154,27 @@ export function NavUser({ user }: Props) {
               aria-label="User menu"
             >
               <Avatar className="h-8 w-8 rounded-lg">
-                <AvatarImage src={user.avatar} alt={user.name} />
+                {user.avatar && (
+                  <MotionAvatarImage
+                    src={user.avatar}
+                    alt={user.name}
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ type: "spring", stiffness: 260, damping: 20 }}
+                  />
+                )}
                 <AvatarFallback className="rounded-lg">
-                  {user.name?.[0] ?? "U"}
+                  {user.name[0] ?? "U"}
                 </AvatarFallback>
               </Avatar>
-              <div className="ml-2 grid flex-1 text-left text-sm leading-tight">
+              <motion.div
+                className="ml-2 grid flex-1 text-left text-sm leading-tight"
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+              >
                 <span className="truncate font-semibold">{user.name}</span>
                 <span className="truncate text-xs">{user.email}</span>
-              </div>
+              </motion.div>
               <ChevronsUpDown className="ml-auto size-4" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
@@ -141,7 +188,15 @@ export function NavUser({ user }: Props) {
             <DropdownMenuLabel className="p-0 font-normal">
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <Avatar className="h-8 w-8 rounded-lg">
-                  <AvatarImage src={user.avatar} alt={user.name} />
+                  {user.avatar && (
+                    <MotionAvatarImage
+                      src={user.avatar}
+                      alt={user.name}
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ type: "spring", stiffness: 260, damping: 20 }}
+                    />
+                  )}
                   <AvatarFallback className="rounded-lg">SN</AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
@@ -160,7 +215,6 @@ export function NavUser({ user }: Props) {
                   Profile
                 </Link>
               </DropdownMenuItem>
-  
               <DropdownMenuItem asChild>
                 <Link href="/settings/notifications">
                   <Bell className="mr-2 size-4" />
