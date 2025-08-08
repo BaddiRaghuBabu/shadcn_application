@@ -43,3 +43,42 @@ export async function GET() {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
+// BAN user 
+
+export async function POST(req: Request) {
+  try {
+    const supabaseAdmin = getSupabaseAdminClient();
+    const json = await req.json().catch(() => ({}));
+    const ids: unknown = (json as { ids?: unknown }).ids;
+
+    if (!Array.isArray(ids) || !ids.every((id) => typeof id === "string")) {
+      return NextResponse.json(
+        { error: "Invalid payload" },
+        { status: 400 },
+      );
+    }
+
+    const updates = await Promise.all(
+      ids.map((id) =>
+        supabaseAdmin.auth.admin.updateUserById(
+          id,
+          { ban: true } as Record<string, unknown>,
+        ),
+      ),
+    );
+
+    const errors = updates
+      .map((r, i) => (r.error ? { id: ids[i] as string, message: r.error.message } : null))
+      .filter((r): r is { id: string; message: string } => r !== null);
+
+    if (errors.length) {
+      return NextResponse.json({ error: errors }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

@@ -7,6 +7,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
+
 import {
   Table,
   TableBody,
@@ -117,6 +119,37 @@ export default function AdminUsersPage() {
 
   const clearSelection = () => setSelected({});
 
+   const banSelected = async () => {
+    const ids = Object.entries(selected)
+      .filter(([, v]) => v)
+      .map(([id]) => id);
+    if (ids.length === 0) return;
+    try {
+      setLoading(true);
+      NProgress.start();
+      const res = await fetch("/api/admin-users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      if (!res.ok) {
+        throw new Error("Failed to ban users");
+      }
+      setAllUsers((prev) =>
+        prev.map((u) =>
+          ids.includes(u.id) ? { ...u, status: "Suspended" } : u,
+        ),
+      );
+      toast.success("User(s) banned");
+      clearSelection();
+    } catch (_err) {
+      toast.error("Failed to ban users");
+    } finally {
+      setLoading(false);
+      NProgress.done();
+    }
+  };
+
   return (
     <div className="w-full h-full flex flex-col">
       {/* nprogress green bar */}
@@ -147,7 +180,7 @@ export default function AdminUsersPage() {
           <div className="mb-3 flex items-center gap-6 rounded-none border bg-card px-4 py-2.5 text-sm">
             <div className="font-medium">{selectedCount} user(s) selected</div>
             <div className="h-5 w-px bg-border" />
-            <Button variant="outline" className="gap-2">
+            <Button variant="outline" className="gap-2" onClick={banSelected}>
               <ShieldBan className="h-4 w-4" />
               Ban User
             </Button>
@@ -237,7 +270,9 @@ export default function AdminUsersPage() {
                             <div className="flex items-start gap-3">
                               <Mail className="mt-1 h-4 w-4 text-muted-foreground" />
                               <div className="leading-tight">
-                                <div className="font-medium">{user.email}</div>
+                                <div className="font-medium">
+                                  {user.email}
+                                </div>
 
                               </div>
                             </div>
