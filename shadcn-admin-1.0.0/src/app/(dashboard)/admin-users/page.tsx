@@ -1,10 +1,9 @@
 // src/app/(dashboard)/admin-users/page.tsx
 "use client";
 
-import { useMemo, useState } from "react";
 import NProgress from "nprogress";
 import "nprogress/nprogress.css";
-
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -46,48 +45,48 @@ type User = {
   email: string;
   status: "Active" | "Invited" | "Suspended";
   createdAt: string;
-  lastSignIn?: string;
+  lastSignIn?: string | null;
 };
 
-const makeUsers = (count = 123): User[] => {
-  const names = [
-    "hazel.howard",
-    "tiffany.phillips",
-    "natalie.brooks",
-    "michael.rodriguez",
-    "rachel.green",
-    "nathan.cooper",
-    "emily.cook",
-    "henry.white",
-    "emily.cox",
-    "ian.richardson",
-    "skylar.cox",
-    "amelia.harris",
-    "liam.martin",
-    "sophia.lewis",
-    "noah.walker",
-    "mia.thomas",
-  ];
-  const base = "Aug 8 2025, 03:00";
-  return new Array(count).fill(0).map((_, i) => ({
-    id: `${i + 1}`,
-    email: `demo-user-${names[i % names.length]}.${1754647200 + i}@supamode.demo`,
-    status: "Active",
-    createdAt: base,
-    lastSignIn: "-",
-  }));
-};
+const formatDate = (iso?: string | null) =>
+  iso
+    ? new Date(iso).toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "-";
 
 NProgress.configure({ showSpinner: false, trickleSpeed: 120 });
 
 export default function AdminUsersPage() {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const pageSize = 25;
 
-  const allUsers = useMemo(() => makeUsers(), []);
+  const [allUsers, setAllUsers] = useState<User[]>([]);
+    useEffect(() => {
+    const loadUsers = async () => {
+      try {
+        NProgress.start();
+        const res = await fetch("/api/admin-users");
+        const data = await res.json();
+        setAllUsers(data.users ?? []);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error("Failed to load users", err);
+      } finally {
+        setLoading(false);
+        NProgress.done();
+      }
+    };
+    loadUsers();
+  }, []);
+
   const filtered = useMemo(() => {
     const q = query.toLowerCase().trim();
     return q ? allUsers.filter((u) => u.email.toLowerCase().includes(q)) : allUsers;
@@ -238,10 +237,8 @@ export default function AdminUsersPage() {
                             <div className="flex items-start gap-3">
                               <Mail className="mt-1 h-4 w-4 text-muted-foreground" />
                               <div className="leading-tight">
-                                <div className="font-medium">demo-user-</div>
-                                <div className="text-muted-foreground text-sm">
-                                  {user.email}
-                                </div>
+                                <div className="font-medium">{user.email}</div>
+
                               </div>
                             </div>
                           </TableCell>
@@ -255,12 +252,12 @@ export default function AdminUsersPage() {
 
                           {/* Created */}
                           <TableCell className="align-middle text-sm whitespace-nowrap">
-                            {user.createdAt}
+                            {formatDate(user.createdAt)}
                           </TableCell>
 
                           {/* Last sign in */}
                           <TableCell className="align-middle text-sm whitespace-nowrap">
-                            {user.lastSignIn ?? "-"}
+                            {formatDate(user.lastSignIn)}
                           </TableCell>
 
                           {/* Actions */}
