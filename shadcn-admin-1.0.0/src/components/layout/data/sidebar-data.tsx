@@ -58,6 +58,7 @@ export const sidebarData: SidebarData = {
               title: "Dashboard 1",
               url: "/",
             },
+  
 
           ],
         },
@@ -69,6 +70,11 @@ export const sidebarData: SidebarData = {
         {
           title: "Users",
           url: "/users",
+          icon: IconUsers,
+        },
+                {
+          title: "Admin",
+          url: "/admin-users",
           icon: IconUsers,
         },
       ],
