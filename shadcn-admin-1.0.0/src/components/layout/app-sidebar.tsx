@@ -1,6 +1,6 @@
 
 "use client"
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   Sidebar,
   SidebarContent,
@@ -12,23 +12,18 @@ import { NavGroup } from "@/components/layout/nav-group";
 import { NavUser } from "@/components/layout/nav-user";
 import { TeamSwitcher } from "@/components/layout/team-switcher";
 import { sidebarData } from "./data/sidebar-data";
-import { supabase } from "@/lib/supabaseClient";
+import { useUserRole } from "@/hooks/use-user-role";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const [role, setRole] = useState<string | null>(null);
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setRole(session?.user.user_metadata?.role ?? null);
-    });
-  }, []);
+  const role = useUserRole();
 
   const navGroups = useMemo(() => {
     return sidebarData.navGroups.map((group) => ({
       ...group,
       items: group.items.filter((item) => {
         if (!item.roles) return true;
-        return role ? item.roles.includes(role) : false;
+        return item.roles.includes(role);
       }),
     }));
   }, [role]);
