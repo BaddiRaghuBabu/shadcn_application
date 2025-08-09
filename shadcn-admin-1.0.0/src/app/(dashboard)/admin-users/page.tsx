@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { useUserRole } from "@/hooks/use-user-role";
+
 
 import {
   Table,
@@ -96,7 +98,8 @@ const statusStyles: Record<
 NProgress.configure({ showSpinner: false, trickleSpeed: 120 });
 
 export default function AdminUsersPage() {
-    useRequireAdmin();
+  useRequireAdmin();
+  const role = useUserRole();
 
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -191,6 +194,8 @@ export default function AdminUsersPage() {
     () => allUsers.filter((u) => selected[u.id]),
     [allUsers, selected]
   );
+    if (role !== "admin") return null;
+
 
   // ---------------------- Actions ----------------------
   const banSelected = async () => {

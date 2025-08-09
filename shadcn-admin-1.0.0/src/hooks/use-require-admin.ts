@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 
 import { supabase } from "@/lib/supabaseClient";
 import { useRequireAuth } from "./use-require-auth";
+import { getUserRole } from "@/lib/user-role";
+
 
 /** Ensure the current user has an admin role. Redirects to /403 otherwise. */
 export function useRequireAdmin() {
@@ -16,10 +18,16 @@ export function useRequireAdmin() {
   useEffect(() => {
     const checkRole = async () => {
       const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const role = session?.user.user_metadata?.role;
-      if (role !== "admin" && role !== "superadmin") {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        router.replace("/403");
+        return;
+      }
+
+      const role = await getUserRole(user.id);
+      if (role !== "admin") {
         router.replace("/403");
       }
     };
