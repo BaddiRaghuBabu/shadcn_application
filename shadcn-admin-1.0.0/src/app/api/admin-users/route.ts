@@ -1,11 +1,8 @@
-
 // /src/app/api/admin-users/route.ts
 import { NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/supabaseClient";
 import type { User } from "@supabase/supabase-js";
 
-// Supabase's User type may not include `banned_until` depending on SDK version.
-// Extend it so TS stops erroring while remaining safe at runtime.
 type AdminUser = User & {
   banned_until?: string | null;
 };
@@ -22,12 +19,11 @@ export async function GET() {
     const users = (data?.users ?? []).map((u) => {
       const au = u as AdminUser;
 
-      const status =
-        au.banned_until
-          ? "Suspended"
-          : u.email_confirmed_at
-            ? "Active"
-            : "Invited";
+      const status = au.banned_until
+        ? "Suspended"
+        : u.email_confirmed_at
+        ? "Active"
+        : "Invited";
 
       return {
         id: u.id,
@@ -45,28 +41,35 @@ export async function GET() {
   }
 }
 
-// Ban or unban users
-
 export async function POST(req: Request) {
   try {
     const supabaseAdmin = getSupabaseAdminClient();
     const json = await req.json().catch(() => ({}));
-      const action = (json as { action?: string }).action;
+    const action = (json as { action?: string }).action;
 
     if (action === "reset-password") {
       const emails: unknown = (json as { emails?: unknown }).emails;
       if (!Array.isArray(emails) || !emails.every((e) => typeof e === "string")) {
-        return NextResponse.json(
-          { error: "Invalid payload" },
-          { status: 400 },
-        );
+        return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
       }
+
+      const origin =
+        req.headers.get("origin") || process.env.NEXT_PUBLIC_SITE_URL;
+
       const results = await Promise.all(
-        emails.map((email) => supabaseAdmin.auth.resetPasswordForEmail(email)),
+        emails.map((email) =>
+          supabaseAdmin.auth.resetPasswordForEmail(email, {
+            redirectTo: `${origin}/reset-password`,
+          })
+        )
       );
+
       const errors = results
-        .map((r, i) => (r.error ? { email: emails[i] as string, message: r.error.message } : null))
+        .map((r, i) =>
+          r.error ? { email: emails[i] as string, message: r.error.message } : null
+        )
         .filter((r): r is { email: string; message: string } => r !== null);
+
       if (errors.length) {
         return NextResponse.json({ error: errors }, { status: 500 });
       }
@@ -74,15 +77,11 @@ export async function POST(req: Request) {
     }
 
     const ids: unknown = (json as { ids?: unknown }).ids;
-
     const bannedUntilRaw: unknown = (json as { bannedUntil?: unknown }).bannedUntil;
     const actionType = action === "unban" ? "unban" : "ban";
 
     if (!Array.isArray(ids) || !ids.every((id) => typeof id === "string")) {
-      return NextResponse.json(
-        { error: "Invalid payload" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
     }
 
     let banDuration: string | undefined;
@@ -100,10 +99,11 @@ export async function POST(req: Request) {
       ids.map((id) =>
         supabaseAdmin.auth.admin.updateUserById(
           id,
-          (actionType === "unban"
+          actionType === "unban"
             ? { ban_duration: "none" }
-            : { ban_duration: banDuration ?? "8760h" }) as Record<string, unknown>,        ),
-      ),
+            : { ban_duration: banDuration ?? "8760h" }
+        )
+      )
     );
 
     const errors = updates
