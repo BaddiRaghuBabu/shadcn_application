@@ -119,37 +119,46 @@ export default function AdminUsersPage() {
 
   const clearSelection = () => setSelected({});
 
-   const banSelected = async () => {
-    const ids = Object.entries(selected)
-      .filter(([, v]) => v)
-      .map(([id]) => id);
-    if (ids.length === 0) return;
-    try {
-      setLoading(true);
-      NProgress.start();
-      const res = await fetch("/api/admin-users", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids }),
-      });
-      if (!res.ok) {
-        throw new Error("Failed to ban users");
-      }
-      setAllUsers((prev) =>
-        prev.map((u) =>
-          ids.includes(u.id) ? { ...u, status: "Suspended" } : u,
-        ),
-      );
-      toast.success("User(s) banned");
-      clearSelection();
-    } catch (_err) {
-      toast.error("Failed to ban users");
-    } finally {
-      setLoading(false);
-      NProgress.done();
-    }
-  };
+const banSelected = async () => {
+  const ids = Object.entries(selected)
+    .filter(([, v]) => v)
+    .map(([id]) => id);
 
+  console.log("Ban request (client) sending IDs:", ids); // 👈 This will show in browser console
+
+  if (ids.length === 0) return;
+
+  try {
+    setLoading(true);
+    NProgress.start();
+    const res = await fetch("/api/admin-users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids, action: "ban" }), // include action for clarity
+    });
+
+    console.log("Ban request (client) response status:", res.status); // 👈 Also in browser console
+
+    if (!res.ok) {
+      throw new Error("Failed to ban users");
+    }
+    setAllUsers((prev) =>
+      prev.map((u) =>
+        ids.includes(u.id) ? { ...u, status: "Suspended" } : u,
+      ),
+    );
+    toast.success("User(s) banned");
+    clearSelection();
+  } catch (_err) {
+    toast.error("Failed to ban users");
+  } finally {
+    setLoading(false);
+    NProgress.done();
+  }
+};
+
+
+  
   return (
     <div className="w-full h-full flex flex-col">
       {/* nprogress green bar */}
@@ -266,10 +275,10 @@ export default function AdminUsersPage() {
                           </TableCell>
 
                           {/* Email */}
-                          <TableCell className="align-middle">
-                            <div className="flex items-start gap-3">
+                          <TableCell className="align-middle ">
+                            <div className="flex  gap-3 items-center">
                               <Mail className="mt-1 h-4 w-4 text-muted-foreground" />
-                              <div className="leading-tight">
+                              <div className="text-xs ">
                                 <div className="font-medium">
                                   {user.email}
                                 </div>

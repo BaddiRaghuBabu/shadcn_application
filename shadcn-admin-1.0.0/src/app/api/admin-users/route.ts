@@ -1,3 +1,4 @@
+
 // /src/app/api/admin-users/route.ts
 import { NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/supabaseClient";
@@ -51,6 +52,7 @@ export async function POST(req: Request) {
     const supabaseAdmin = getSupabaseAdminClient();
     const json = await req.json().catch(() => ({}));
     const ids: unknown = (json as { ids?: unknown }).ids;
+    const bannedUntilRaw: unknown = (json as { bannedUntil?: unknown }).bannedUntil
 
     if (!Array.isArray(ids) || !ids.every((id) => typeof id === "string")) {
       return NextResponse.json(
@@ -59,11 +61,22 @@ export async function POST(req: Request) {
       );
     }
 
+        let banDuration: string | undefined;
+    if (typeof bannedUntilRaw === "string") {
+      const untilMs = Date.parse(bannedUntilRaw);
+      if (!Number.isNaN(untilMs)) {
+        const diffSec = Math.ceil((untilMs - Date.now()) / 1000);
+        if (diffSec > 0) {
+          banDuration = `${diffSec}s`;
+        }
+      }
+    }
+
     const updates = await Promise.all(
       ids.map((id) =>
         supabaseAdmin.auth.admin.updateUserById(
           id,
-          { ban: true } as Record<string, unknown>,
+          { ban_duration: banDuration ?? "8760h" } as Record<string, unknown>,
         ),
       ),
     );
