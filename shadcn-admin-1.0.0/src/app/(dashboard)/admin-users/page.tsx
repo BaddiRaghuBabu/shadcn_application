@@ -1,4 +1,3 @@
-
 // src/app/(dashboard)/admin-users/page.tsx
 "use client";
 
@@ -155,10 +154,9 @@ export default function AdminUsersPage() {
   // ---------- Confirmation Dialog plumbing (returns true/false) ----------
   const [banOpen, setBanOpen] = useState(false);
   const [unbanOpen, setUnbanOpen] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
 
-  // ✅ FIX: give useRef an initial value and allow null
   const resolverRef = useRef<((v: boolean) => void) | null>(null);
-
   const [banText, setBanText] = useState("");
 
   const openBanConfirm = () =>
@@ -174,10 +172,17 @@ export default function AdminUsersPage() {
       setUnbanOpen(true);
     });
 
+  const openResetConfirm = () =>
+    new Promise<boolean>((resolve) => {
+      resolverRef.current = resolve;
+      setResetOpen(true);
+    });
+
   const resolveConfirm = (value: boolean) => {
     resolverRef.current?.(value);
     setBanOpen(false);
     setUnbanOpen(false);
+    setResetOpen(false);
   };
 
   const selectedUsers = useMemo(
@@ -248,9 +253,13 @@ export default function AdminUsersPage() {
     }
   };
 
+  // ---------- Reset Password (NO toasts; pop-up confirm only) ----------
   const resetPasswordSelected = async () => {
     const emails = selectedUsers.map((u) => u.email);
     if (emails.length === 0) return;
+
+    const ok = await openResetConfirm(); // true | false
+    if (!ok) return;
 
     try {
       setLoading(true);
@@ -261,10 +270,11 @@ export default function AdminUsersPage() {
         body: JSON.stringify({ action: "reset-password", emails }),
       });
       if (!res.ok) throw new Error("Failed to reset passwords");
-      toast.success("Password reset email(s) sent");
+      // No toast — per request. Just finish silently.
       clearSelection();
     } catch {
-      toast.error("Failed to reset passwords");
+      // No toast — per request. You could show another dialog if you want.
+      // For now, do nothing visible.
     } finally {
       setLoading(false);
       NProgress.done();
@@ -296,6 +306,7 @@ export default function AdminUsersPage() {
       </div>
 
       <Card className="w-full h-full border-0 shadow-none">
+        {/* Selection toolbar */}
         {selectedCount > 0 && (
           <div className="mb-3 flex items-center gap-6 rounded-none border bg-card px-4 py-2.5 text-sm">
             <div className="font-medium">{selectedCount} user(s) selected</div>
@@ -308,16 +319,22 @@ export default function AdminUsersPage() {
               <ShieldCheck className="h-4 w-4" />
               Unban User
             </Button>
-            <Button variant="outline" className="gap-2">
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={resetPasswordSelected}
+            >
               <RotateCw className="h-4 w-4" />
               Reset Password
             </Button>
-            <Button variant="outline" className="gap-2" onClick={resetPasswordSelected}>              <X className="h-4 w-4" />
+            <Button variant="outline" className="gap-2" onClick={clearSelection}>
+              <X className="h-4 w-4" />
               Clear
             </Button>
           </div>
         )}
 
+        {/* Search */}
         <CardHeader className="pb-3 px-0">
           <div className="relative w-full sm:w-80 ml-4">
             <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -333,16 +350,20 @@ export default function AdminUsersPage() {
           </div>
         </CardHeader>
 
+        {/* Table */}
         <CardContent className="pt-0 px-0">
           <div className="w-full rounded-none border overflow-hidden">
+            {/* scrollable container */}
             <div className="relative max-h-[560px] overflow-auto">
               <Table className="w-full table-fixed">
+                {/* locked widths to keep alignment */}
                 <colgroup>
                   {([48, null, 200, 200, 160, 60] as const).map((w, i) => (
                     <col key={i} {...(w ? { style: { width: w } } : {})} />
                   ))}
                 </colgroup>
 
+                {/* sticky header that stays visible while scrolling */}
                 <TableHeader className="sticky top-0 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b shadow-sm">
                   <TableRow>
                     <TableHead className="font-medium">
@@ -383,35 +404,40 @@ export default function AdminUsersPage() {
                             />
                           </TableCell>
 
-                          <TableCell className="align-middle">
-                            <div className="flex gap-3 items-center">
+                          {/* Email */}
+                          <TableCell className="align-middle ">
+                            <div className="flex  gap-3 items-center">
                               <Mail className="mt-1 h-4 w-4 text-muted-foreground" />
-                              <div className="text-xs">
-                                <div className="font-medium">{user.email}</div>
+                              <div className="text-xs ">
+                                <div className="font-medium">
+                                  {user.email}
+                                </div>
                               </div>
                             </div>
                           </TableCell>
 
+                          {/* Account status */}
                           <TableCell className="align-middle">
                             <Badge
-                              variant="outline"
                               className={`gap-2 px-2.5 py-1 text-xs font-medium ${statusStyles[user.status].badge}`}
+                              variant="outline"
                             >
-                              <span
-                                className={`h-2 w-2 rounded-full ${statusStyles[user.status].dot}`}
-                              />
+                              <span className={`h-2 w-2 rounded-full ${statusStyles[user.status].dot}`} />
                               {statusStyles[user.status].label}
                             </Badge>
                           </TableCell>
 
+                          {/* Created */}
                           <TableCell className="align-middle text-sm whitespace-nowrap">
                             {formatDate(user.createdAt)}
                           </TableCell>
 
+                          {/* Last sign in */}
                           <TableCell className="align-middle text-sm whitespace-nowrap">
                             {formatDate(user.lastSignIn)}
                           </TableCell>
 
+                          {/* Actions */}
                           <TableCell className="align-middle text-right">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
@@ -460,6 +486,7 @@ export default function AdminUsersPage() {
               </Table>
             </div>
 
+            {/* pagination */}
             <div className="flex items-center justify-between border-t p-3 text-sm">
               <div className="text-muted-foreground">
                 Page {clampedPage} of {totalPages}
@@ -557,6 +584,31 @@ export default function AdminUsersPage() {
               onClick={() => resolveConfirm(true)}
             >
               Unban user
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ---------- Reset Password Confirm (no toasts) ---------- */}
+      <Dialog open={resetOpen} onOpenChange={(o) => (!o ? resolveConfirm(false) : null)}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>Send password reset to {selectedUsers.length} user(s)</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              We will email a password reset link to the selected user(s).
+            </p>
+            <div className="rounded-md border bg-muted/40 p-3 text-xs max-h-36 overflow-auto">
+              {selectedUsers.map((u) => (
+                <div key={u.id} className="truncate">{u.email}</div>
+              ))}
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => resolveConfirm(false)}>Cancel</Button>
+            <Button className="bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => resolveConfirm(true)}>
+              Send reset link(s)
             </Button>
           </DialogFooter>
         </DialogContent>
