@@ -51,10 +51,32 @@ export async function POST(req: Request) {
   try {
     const supabaseAdmin = getSupabaseAdminClient();
     const json = await req.json().catch(() => ({}));
+      const action = (json as { action?: string }).action;
+
+    if (action === "reset-password") {
+      const emails: unknown = (json as { emails?: unknown }).emails;
+      if (!Array.isArray(emails) || !emails.every((e) => typeof e === "string")) {
+        return NextResponse.json(
+          { error: "Invalid payload" },
+          { status: 400 },
+        );
+      }
+      const results = await Promise.all(
+        emails.map((email) => supabaseAdmin.auth.resetPasswordForEmail(email)),
+      );
+      const errors = results
+        .map((r, i) => (r.error ? { email: emails[i] as string, message: r.error.message } : null))
+        .filter((r): r is { email: string; message: string } => r !== null);
+      if (errors.length) {
+        return NextResponse.json({ error: errors }, { status: 500 });
+      }
+      return NextResponse.json({ success: true });
+    }
+
     const ids: unknown = (json as { ids?: unknown }).ids;
-    const action =
-      (json as { action?: string }).action === "unban" ? "unban" : "ban";
+
     const bannedUntilRaw: unknown = (json as { bannedUntil?: unknown }).bannedUntil;
+    const actionType = action === "unban" ? "unban" : "ban";
 
     if (!Array.isArray(ids) || !ids.every((id) => typeof id === "string")) {
       return NextResponse.json(
@@ -78,7 +100,7 @@ export async function POST(req: Request) {
       ids.map((id) =>
         supabaseAdmin.auth.admin.updateUserById(
           id,
-          (action === "unban"
+          (actionType === "unban"
             ? { ban_duration: "none" }
             : { ban_duration: banDuration ?? "8760h" }) as Record<string, unknown>,        ),
       ),

@@ -1,3 +1,4 @@
+
 // src/app/(dashboard)/admin-users/page.tsx
 "use client";
 
@@ -247,6 +248,29 @@ export default function AdminUsersPage() {
     }
   };
 
+  const resetPasswordSelected = async () => {
+    const emails = selectedUsers.map((u) => u.email);
+    if (emails.length === 0) return;
+
+    try {
+      setLoading(true);
+      NProgress.start();
+      const res = await fetch("/api/admin-users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reset-password", emails }),
+      });
+      if (!res.ok) throw new Error("Failed to reset passwords");
+      toast.success("Password reset email(s) sent");
+      clearSelection();
+    } catch {
+      toast.error("Failed to reset passwords");
+    } finally {
+      setLoading(false);
+      NProgress.done();
+    }
+  };
+
   return (
     <div className="w-full h-full flex flex-col">
       {/* nprogress green bar */}
@@ -288,8 +312,7 @@ export default function AdminUsersPage() {
               <RotateCw className="h-4 w-4" />
               Reset Password
             </Button>
-            <Button variant="ghost" className="gap-2" onClick={clearSelection}>
-              <X className="h-4 w-4" />
+            <Button variant="outline" className="gap-2" onClick={resetPasswordSelected}>              <X className="h-4 w-4" />
               Clear
             </Button>
           </div>
