@@ -3,7 +3,7 @@
 
 import NProgress from "nprogress";
 import "nprogress/nprogress.css";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -38,7 +38,16 @@ import {
   ShieldBan,
   RotateCw,
   X,
+  ShieldCheck,
 } from "lucide-react";
+
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 
@@ -61,6 +70,29 @@ const formatDate = (iso?: string | null) =>
       })
     : "-";
 
+// soft “light” badge colors for each status
+const statusStyles: Record<
+  User["status"],
+  { badge: string; dot: string; label: string }
+> = {
+  Active: {
+    badge:
+      "bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-emerald-200",
+    dot: "bg-emerald-500",
+    label: "Active",
+  },
+  Invited: {
+    badge: "bg-sky-100 text-sky-700 hover:bg-sky-100 border-sky-200",
+    dot: "bg-sky-500",
+    label: "Invited",
+  },
+  Suspended: {
+    badge: "bg-rose-100 text-rose-700 hover:bg-rose-100 border-rose-200",
+    dot: "bg-rose-500",
+    label: "Suspended",
+  },
+};
+
 NProgress.configure({ showSpinner: false, trickleSpeed: 120 });
 
 export default function AdminUsersPage() {
@@ -71,7 +103,7 @@ export default function AdminUsersPage() {
   const pageSize = 25;
 
   const [allUsers, setAllUsers] = useState<User[]>([]);
-    useEffect(() => {
+  useEffect(() => {
     const loadUsers = async () => {
       try {
         NProgress.start();
@@ -111,7 +143,7 @@ export default function AdminUsersPage() {
     if (next < 1 || next > totalPages || next === page) return;
     setLoading(true);
     NProgress.start();
-    await new Promise((r) => setTimeout(r, 600)); // replace with real fetch if needed
+    await new Promise((r) => setTimeout(r, 600));
     setPage(next);
     setLoading(false);
     NProgress.done();
@@ -119,46 +151,102 @@ export default function AdminUsersPage() {
 
   const clearSelection = () => setSelected({});
 
-const banSelected = async () => {
-  const ids = Object.entries(selected)
-    .filter(([, v]) => v)
-    .map(([id]) => id);
+  // ---------- Confirmation Dialog plumbing (returns true/false) ----------
+  const [banOpen, setBanOpen] = useState(false);
+  const [unbanOpen, setUnbanOpen] = useState(false);
 
-  console.log("Ban request (client) sending IDs:", ids); // 👈 This will show in browser console
+  // ✅ FIX: give useRef an initial value and allow null
+  const resolverRef = useRef<((v: boolean) => void) | null>(null);
 
-  if (ids.length === 0) return;
+  const [banText, setBanText] = useState("");
 
-  try {
-    setLoading(true);
-    NProgress.start();
-    const res = await fetch("/api/admin-users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids, action: "ban" }), // include action for clarity
+  const openBanConfirm = () =>
+    new Promise<boolean>((resolve) => {
+      resolverRef.current = resolve;
+      setBanText("");
+      setBanOpen(true);
     });
 
-    console.log("Ban request (client) response status:", res.status); // 👈 Also in browser console
+  const openUnbanConfirm = () =>
+    new Promise<boolean>((resolve) => {
+      resolverRef.current = resolve;
+      setUnbanOpen(true);
+    });
 
-    if (!res.ok) {
-      throw new Error("Failed to ban users");
+  const resolveConfirm = (value: boolean) => {
+    resolverRef.current?.(value);
+    setBanOpen(false);
+    setUnbanOpen(false);
+  };
+
+  const selectedUsers = useMemo(
+    () => allUsers.filter((u) => selected[u.id]),
+    [allUsers, selected]
+  );
+
+  // ---------------------- Actions ----------------------
+  const banSelected = async () => {
+    const ids = Object.entries(selected)
+      .filter(([, v]) => v)
+      .map(([id]) => id);
+    if (ids.length === 0) return;
+
+    const ok = await openBanConfirm(); // true | false
+    if (!ok) return;
+
+    try {
+      setLoading(true);
+      NProgress.start();
+      const res = await fetch("/api/admin-users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, action: "ban" }),
+      });
+      if (!res.ok) throw new Error("Failed to ban users");
+      setAllUsers((prev) =>
+        prev.map((u) => (ids.includes(u.id) ? { ...u, status: "Suspended" } : u))
+      );
+      toast.success("User(s) banned");
+      clearSelection();
+    } catch {
+      toast.error("Failed to ban users");
+    } finally {
+      setLoading(false);
+      NProgress.done();
     }
-    setAllUsers((prev) =>
-      prev.map((u) =>
-        ids.includes(u.id) ? { ...u, status: "Suspended" } : u,
-      ),
-    );
-    toast.success("User(s) banned");
-    clearSelection();
-  } catch (_err) {
-    toast.error("Failed to ban users");
-  } finally {
-    setLoading(false);
-    NProgress.done();
-  }
-};
+  };
 
+  const unbanSelected = async () => {
+    const ids = Object.entries(selected)
+      .filter(([, v]) => v)
+      .map(([id]) => id);
+    if (ids.length === 0) return;
 
-  
+    const ok = await openUnbanConfirm(); // true | false
+    if (!ok) return;
+
+    try {
+      setLoading(true);
+      NProgress.start();
+      const res = await fetch("/api/admin-users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, action: "unban" }),
+      });
+      if (!res.ok) throw new Error("Failed to unban users");
+      setAllUsers((prev) =>
+        prev.map((u) => (ids.includes(u.id) ? { ...u, status: "Active" } : u))
+      );
+      toast.success("User(s) unbanned");
+      clearSelection();
+    } catch {
+      toast.error("Failed to unban users");
+    } finally {
+      setLoading(false);
+      NProgress.done();
+    }
+  };
+
   return (
     <div className="w-full h-full flex flex-col">
       {/* nprogress green bar */}
@@ -184,7 +272,6 @@ const banSelected = async () => {
       </div>
 
       <Card className="w-full h-full border-0 shadow-none">
-        {/* Selection toolbar */}
         {selectedCount > 0 && (
           <div className="mb-3 flex items-center gap-6 rounded-none border bg-card px-4 py-2.5 text-sm">
             <div className="font-medium">{selectedCount} user(s) selected</div>
@@ -192,6 +279,10 @@ const banSelected = async () => {
             <Button variant="outline" className="gap-2" onClick={banSelected}>
               <ShieldBan className="h-4 w-4" />
               Ban User
+            </Button>
+            <Button variant="outline" className="gap-2" onClick={unbanSelected}>
+              <ShieldCheck className="h-4 w-4" />
+              Unban User
             </Button>
             <Button variant="outline" className="gap-2">
               <RotateCw className="h-4 w-4" />
@@ -204,7 +295,6 @@ const banSelected = async () => {
           </div>
         )}
 
-        {/* Search */}
         <CardHeader className="pb-3 px-0">
           <div className="relative w-full sm:w-80 ml-4">
             <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -220,20 +310,16 @@ const banSelected = async () => {
           </div>
         </CardHeader>
 
-        {/* Table */}
         <CardContent className="pt-0 px-0">
           <div className="w-full rounded-none border overflow-hidden">
-            {/* scrollable container */}
             <div className="relative max-h-[560px] overflow-auto">
               <Table className="w-full table-fixed">
-                {/* locked widths to keep alignment */}
                 <colgroup>
-                  {([48, null, 180, 200, 160, 60] as const).map((w, i) => (
+                  {([48, null, 200, 200, 160, 60] as const).map((w, i) => (
                     <col key={i} {...(w ? { style: { width: w } } : {})} />
                   ))}
                 </colgroup>
 
-                {/* sticky header that stays visible while scrolling */}
                 <TableHeader className="sticky top-0 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b shadow-sm">
                   <TableRow>
                     <TableHead className="font-medium">
@@ -274,37 +360,35 @@ const banSelected = async () => {
                             />
                           </TableCell>
 
-                          {/* Email */}
-                          <TableCell className="align-middle ">
-                            <div className="flex  gap-3 items-center">
+                          <TableCell className="align-middle">
+                            <div className="flex gap-3 items-center">
                               <Mail className="mt-1 h-4 w-4 text-muted-foreground" />
-                              <div className="text-xs ">
-                                <div className="font-medium">
-                                  {user.email}
-                                </div>
-
+                              <div className="text-xs">
+                                <div className="font-medium">{user.email}</div>
                               </div>
                             </div>
                           </TableCell>
 
-                          {/* Account status */}
                           <TableCell className="align-middle">
-                            <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">
-                              {user.status}
+                            <Badge
+                              variant="outline"
+                              className={`gap-2 px-2.5 py-1 text-xs font-medium ${statusStyles[user.status].badge}`}
+                            >
+                              <span
+                                className={`h-2 w-2 rounded-full ${statusStyles[user.status].dot}`}
+                              />
+                              {statusStyles[user.status].label}
                             </Badge>
                           </TableCell>
 
-                          {/* Created */}
                           <TableCell className="align-middle text-sm whitespace-nowrap">
                             {formatDate(user.createdAt)}
                           </TableCell>
 
-                          {/* Last sign in */}
                           <TableCell className="align-middle text-sm whitespace-nowrap">
                             {formatDate(user.lastSignIn)}
                           </TableCell>
 
-                          {/* Actions */}
                           <TableCell className="align-middle text-right">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
@@ -336,7 +420,7 @@ const banSelected = async () => {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Skeleton className="h-6 w-16 rounded-full" />
+                            <Skeleton className="h-6 w-24 rounded-full" />
                           </TableCell>
                           <TableCell>
                             <Skeleton className="h-4 w-40" />
@@ -353,7 +437,6 @@ const banSelected = async () => {
               </Table>
             </div>
 
-            {/* pagination */}
             <div className="flex items-center justify-between border-t p-3 text-sm">
               <div className="text-muted-foreground">
                 Page {clampedPage} of {totalPages}
@@ -400,6 +483,61 @@ const banSelected = async () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* ---------- Ban Confirm (requires typing BAN) ---------- */}
+      <Dialog open={banOpen} onOpenChange={(o) => (!o ? resolveConfirm(false) : null)}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle className="text-red-600">Ban {selectedUsers.length} User(s)</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              This will prevent the selected user(s) from accessing the system. They will receive an error when trying to log in.
+            </p>
+            <div className="rounded-md border bg-muted/40 p-3 text-xs max-h-36 overflow-auto">
+              {selectedUsers.map((u) => (
+                <div key={u.id} className="truncate">{u.email}</div>
+              ))}
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Type <span className="font-semibold">BAN</span> to confirm</label>
+              <Input value={banText} onChange={(e) => setBanText(e.target.value)} placeholder="BAN" />
+            </div>
+            <div className="text-xs text-red-600">You are about to ban {selectedUsers.length} user(s)</div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => resolveConfirm(false)}>Cancel</Button>
+            <Button
+              className="bg-red-600 text-white hover:bg-red-700"
+              disabled={banText.trim().toUpperCase() !== "BAN"}
+              onClick={() => resolveConfirm(true)}
+            >
+              Ban User
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ---------- Unban Confirm ---------- */}
+      <Dialog open={unbanOpen} onOpenChange={(o) => (!o ? resolveConfirm(false) : null)}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>Confirm to unban user</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            The user will have access to your project again once unbanned. Are you sure you want to unban the selected user(s)?
+          </p>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => resolveConfirm(false)}>Cancel</Button>
+            <Button
+              className="bg-amber-500 text-white hover:bg-amber-600"
+              onClick={() => resolveConfirm(true)}
+            >
+              Unban user
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

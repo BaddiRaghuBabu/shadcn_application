@@ -45,14 +45,16 @@ export async function GET() {
   }
 }
 
-// BAN user 
+// Ban or unban users
 
 export async function POST(req: Request) {
   try {
     const supabaseAdmin = getSupabaseAdminClient();
     const json = await req.json().catch(() => ({}));
     const ids: unknown = (json as { ids?: unknown }).ids;
-    const bannedUntilRaw: unknown = (json as { bannedUntil?: unknown }).bannedUntil
+    const action =
+      (json as { action?: string }).action === "unban" ? "unban" : "ban";
+    const bannedUntilRaw: unknown = (json as { bannedUntil?: unknown }).bannedUntil;
 
     if (!Array.isArray(ids) || !ids.every((id) => typeof id === "string")) {
       return NextResponse.json(
@@ -61,8 +63,8 @@ export async function POST(req: Request) {
       );
     }
 
-        let banDuration: string | undefined;
-    if (typeof bannedUntilRaw === "string") {
+    let banDuration: string | undefined;
+    if (action === "ban" && typeof bannedUntilRaw === "string") {
       const untilMs = Date.parse(bannedUntilRaw);
       if (!Number.isNaN(untilMs)) {
         const diffSec = Math.ceil((untilMs - Date.now()) / 1000);
@@ -76,8 +78,9 @@ export async function POST(req: Request) {
       ids.map((id) =>
         supabaseAdmin.auth.admin.updateUserById(
           id,
-          { ban_duration: banDuration ?? "8760h" } as Record<string, unknown>,
-        ),
+          (action === "unban"
+            ? { ban_duration: "none" }
+            : { ban_duration: banDuration ?? "8760h" }) as Record<string, unknown>,        ),
       ),
     );
 
