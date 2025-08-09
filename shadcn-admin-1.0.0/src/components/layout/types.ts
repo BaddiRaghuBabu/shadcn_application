@@ -14,6 +14,8 @@ interface BaseNavItem {
   title: string
   badge?: string
   icon?: React.ElementType
+    /** Optional list of roles that can see this item */
+  roles?: string[]
 }
 
 export type NavItem =

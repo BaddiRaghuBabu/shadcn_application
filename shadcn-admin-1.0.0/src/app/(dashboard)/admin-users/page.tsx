@@ -1,6 +1,5 @@
 // src/app/(dashboard)/admin-users/page.tsx
 "use client";
-
 import NProgress from "nprogress";
 import "nprogress/nprogress.css";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -50,6 +49,7 @@ import {
 } from "@/components/ui/dialog";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
+import { useRequireAdmin } from "@/hooks/use-require-admin";
 
 type User = {
   id: string;
@@ -96,6 +96,8 @@ const statusStyles: Record<
 NProgress.configure({ showSpinner: false, trickleSpeed: 120 });
 
 export default function AdminUsersPage() {
+    useRequireAdmin();
+
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);

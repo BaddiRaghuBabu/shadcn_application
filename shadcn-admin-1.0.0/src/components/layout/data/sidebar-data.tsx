@@ -72,10 +72,11 @@ export const sidebarData: SidebarData = {
           url: "/users",
           icon: IconUsers,
         },
-                {
+         {
           title: "Admin",
           url: "/admin-users",
           icon: IconUsers,
+          roles: ["admin", "superadmin"],
         },
       ],
     },

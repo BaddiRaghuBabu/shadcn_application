@@ -1,16 +1,15 @@
-"use client";
+"use client"
 
-import { useState, useEffect } from "react";
-import { BadgeCheck, Bell, PowerOff, ChevronsUpDown } from "lucide-react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
-import { motion } from "framer-motion";
-
-import { clearDeviceId, getOrSetDeviceId } from "@/lib/device";
-import { supabase } from "@/lib/supabaseClient";
-
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useState, useEffect } from "react"
+import { motion } from "framer-motion"
+import { BadgeCheck, Bell, PowerOff, ChevronsUpDown } from "lucide-react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
+import { clearDeviceId, getOrSetDeviceId } from "@/lib/device"
+import { supabase } from "@/lib/supabaseClient"
+import { useUserRole } from "@/hooks/use-user-role"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,8 +18,13 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
+}  from "@/components/ui/dropdown-menu"
+import {
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  useSidebar,
+} from "@/components/ui/sidebar"
 
 interface UserProfile {
   name: string;
@@ -32,32 +36,33 @@ interface UserProfile {
 const MotionAvatarImage = motion(AvatarImage);
 
 export function NavUser() {
-  const { isMobile } = useSidebar();
-  const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [sessionValid, setSessionValid] = useState(true);
-  const [user, setUser] = useState<UserProfile | null>(null);
+  const { isMobile } = useSidebar()
+  const router = useRouter()
+  const [loading, setLoading] = useState(false)
+  const [sessionValid, setSessionValid] = useState(true)
+  const [user, setUser] = useState<UserProfile | null>(null)
+  const role = useUserRole()
 
   useEffect(() => {
     void (async () => {
       try {
         const {
           data: { user: authUser },
-        } = await supabase.auth.getUser();
+        } = await supabase.auth.getUser()
         if (!authUser) return;
 
-        let name = authUser.user_metadata?.full_name ?? "";
-        let avatar = authUser.user_metadata?.avatar_url ?? "";
+        let name = authUser.user_metadata?.full_name ?? ""
+        let avatar = authUser.user_metadata?.avatar_url ?? ""
 
         const { data: profile } = await supabase
           .from("user_profiles")
           .select("name, avatar")
           .eq("user_id", authUser.id)
-          .single();
+          .single()
 
         if (profile) {
-          name = profile.name ?? name;
-          avatar = profile.avatar ?? avatar;
+          name = profile.name ?? name
+          avatar = profile.avatar ?? avatar
         }
 
         setUser({
@@ -66,10 +71,10 @@ export function NavUser() {
           avatar: avatar || `https://i.pravatar.cc/150?u=${authUser.id}`,
         });
       } catch {
-        toast.error("Failed to load profile");
+        toast.error("Failed to load profile")
       }
-    })();
-  }, []);
+    })()
+  }, [])
 
   // keep session fresh / detect expired session
   useEffect(() => {
@@ -78,30 +83,30 @@ export function NavUser() {
       try {
         const {
           data: { session: currentSession },
-        } = await supabase.auth.getSession();
+        } = await supabase.auth.getSession()
         if (!currentSession && !cancelled) {
-          setSessionValid(false);
-          router.replace("/login");
+          setSessionValid(false)
+          router.replace("/login")
         }
       } catch {
-        toast.error("Connection to auth backend unstable. Retrying...");
+        toast.error("Connection to auth backend unstable. Retrying...")
       }
-    }, 30000);
+    }, 30000)
 
     return () => {
-      cancelled = true;
-      clearInterval(interval);
+      cancelled = true
+      clearInterval(interval)
     };
   }, [router]);
 
   const logout = async () => {
-    if (loading) return;
-    setLoading(true);
+    if (loading) return
+    setLoading(true)
     try {
       const {
         data: { session: current },
-      } = await supabase.auth.getSession();
-      const token = current?.access_token;
+      } = await supabase.auth.getSession()
+      const token = current?.access_token
 
       // unregister only this device
       const body = { device_id: getOrSetDeviceId() };
@@ -116,26 +121,26 @@ export function NavUser() {
           body: JSON.stringify(body),
         });
         if (!res.ok) {
-          toast.error("Unable to unregister device. Try again.");
-          setLoading(false);
+          toast.error("Unable to unregister device. Try again.")
+          setLoading(false)
           return;
         }
       }
 
-      const { error } = await supabase.auth.signOut({ scope: "local" });
+      const { error } = await supabase.auth.signOut({ scope: "local" })
       if (error) {
-        toast.error(error.message);
-        setLoading(false);
+        toast.error(error.message)
+        setLoading(false)
         return;
       }
 
-      clearDeviceId();
+      clearDeviceId()
       toast.success("Logged out on this device");
-      router.replace("/login");
+      router.replace("/login")
     } catch {
       toast.error("Unexpected error during logout");
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
   };
 
@@ -194,14 +199,20 @@ export function NavUser() {
                       alt={user.name}
                       initial={{ opacity: 0, scale: 0.8 }}
                       animate={{ opacity: 1, scale: 1 }}
-                      transition={{ type: "spring", stiffness: 260, damping: 20 }}
-                    />
+                      transition={{
+                        type: "spring",
+                        stiffness: 260,
+                        damping: 20,
+                      }}                    />
                   )}
                   <AvatarFallback className="rounded-lg">SN</AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-semibold">{user.name}</span>
                   <span className="truncate text-xs">{user.email}</span>
+                  <span className="text-muted-foreground truncate text-xs capitalize">
+                    {role}
+                  </span>
                 </div>
               </div>
             </DropdownMenuLabel>
@@ -225,8 +236,10 @@ export function NavUser() {
 
             <DropdownMenuSeparator />
 
-            <DropdownMenuItem onClick={() => void logout()} className="flex cursor-pointer items-center">
-              <PowerOff className="mr-2 size-4" />
+            <DropdownMenuItem
+              onClick={() => void logout()}
+              className="flex cursor-pointer items-center"
+            >              <PowerOff className="mr-2 size-4" />
               {loading ? "Logging out…" : "Log out"}
             </DropdownMenuItem>
           </DropdownMenuContent>

@@ -6,6 +6,7 @@ create table if not exists user_profiles (
   dob date,
   avatar text,
   language text,
+  role text not null default 'default' check (role in ('default', 'admin')),
   updated_at timestamptz not null default now()
 );
 
