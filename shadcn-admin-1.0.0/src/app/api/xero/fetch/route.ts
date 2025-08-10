@@ -1,15 +1,24 @@
-import { NextResponse } from "next/server"
-import { getSupabaseAdminClient } from "@/lib/supabaseClient"
+// src/app/api/xero/fetch/route.ts   // getContacts (minimal fields)
+import { NextResponse } from "next/server";
+import { supabase } from "@/lib/supabaseClient";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const supabase = getSupabaseAdminClient()
-  const { data, error } = await supabase
-    .from("xero_contacts")
-    .select("name, email, is_customer")
+  try {
+    const { data, error } = await supabase
+      .from("xero_contacts")
+      .select("name, email, is_customer")
+      .order("created_at", { ascending: false });
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) {
+      throw error;
+    }
+
+    return NextResponse.json(data ?? []);
+  } catch (err: any) {
+    console.error("❌ Failed to fetch contacts:", err?.message ?? err);
+    return NextResponse.json({ error: err?.message ?? "Unknown error" }, { status: 500 });
   }
-
-  return NextResponse.json(data)
 }

@@ -1,44 +1,58 @@
-import { NextResponse } from "next/server"
-import { getSupabaseAdminClient } from "@/lib/supabaseClient"
-import { xero, XeroContact } from "@/lib/xeroService"
+// src/app/api/xero/contacts/route.ts   // Fetch & Save Contacts
+import { NextResponse } from "next/server";
+import { xero } from "@/lib/xeroService";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const supabase = getSupabaseAdminClient()
-    const { data: tokenData, error } = await supabase
+    const { data: tokenData, error } = await supabaseAdmin
       .from("xero_tokens")
       .select("*")
       .order("created_at", { ascending: false })
       .limit(1)
-      .single()
+      .maybeSingle();
 
     if (error || !tokenData) {
-      return NextResponse.json({ error: "No token found" }, { status: 500 })
+      throw new Error("No token found in Supabase");
     }
 
-    const { tenant_id, access_token } = tokenData
-    const contacts = await xero.getContacts(access_token, tenant_id)
+    const { tenant_id, access_token, refresh_token } = tokenData;
 
-    const rows = contacts.map((contact: XeroContact) => ({
+    console.log("🟢 Accessing tenant:", tenant_id);
+
+    xero.setTokenSet({ access_token, refresh_token } as any);
+
+    const contactsResponse = await xero.accountingApi.getContacts(tenant_id);
+    const contacts = contactsResponse.body?.contacts ?? [];
+
+    console.log(`📦 ${contacts.length} contacts fetched from Xero`);
+
+    const rows = contacts.map((contact: any) => ({
       tenant_id,
-      contact_id: contact.ContactID,
-      name: contact.Name,
-      email: contact.EmailAddress || null,
-      is_customer: contact.IsCustomer,
-      is_supplier: contact.IsSupplier,
-    }))
+      contact_id: contact.contactID,
+      name: contact.name ?? null,
+      email: contact.emailAddress ?? null,
+      is_customer: contact.isCustomer ?? null,
+      is_supplier: contact.isSupplier ?? null,
+    }));
 
-    const { error: insertError } = await supabase
-      .from("xero_contacts")
-      .insert(rows)
-
-    if (insertError) {
-      return NextResponse.json({ error: insertError.message }, { status: 500 })
+    if (rows.length > 0) {
+      const { error: insertError } = await supabaseAdmin
+        .from("xero_contacts")
+        .insert(rows);
+      if (insertError) throw insertError;
     }
 
-    return NextResponse.json({ inserted: rows.length })
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err)
-    return NextResponse.json({ error: message }, { status: 500 })
+    console.log("✅ Contacts saved to Supabase");
+    return NextResponse.json({
+      message: "✅ Contacts saved to Supabase",
+      count: rows.length,
+    });
+  } catch (err: any) {
+    console.error("❌ Failed to fetch or insert contacts:", err);
+    return NextResponse.json({ error: err?.message ?? "Unknown error" }, { status: 500 });
   }
 }

@@ -1,43 +1,32 @@
-import { NextResponse } from "next/server"
-import { getSupabaseAdminClient } from "@/lib/supabaseClient"
-import { xero, XeroInvoice,  } from "@/lib/xeroService"
+// src/app/api/xero/invoices/route.ts
+import { NextResponse } from "next/server";
+import { xero } from "@/lib/xeroService";
+import { supabase } from "@/lib/supabaseClient";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const supabase = getSupabaseAdminClient()
     const { data: tokenData, error } = await supabase
       .from("xero_tokens")
       .select("*")
       .order("created_at", { ascending: false })
       .limit(1)
-      .single()
+      .maybeSingle();
 
     if (error || !tokenData) {
-      return NextResponse.json({ error: "No token found" }, { status: 500 })
+      return NextResponse.json({ error: "No token found in Supabase" }, { status: 400 });
     }
 
-    const { tenant_id, access_token } = tokenData
-    const invoices = await xero.getInvoices(access_token, tenant_id)
+    const { tenant_id, access_token, refresh_token } = tokenData;
 
-    const rows = invoices.map((inv: XeroInvoice) => ({
-      tenant_id,
-      invoice_id: inv.InvoiceID,
-      invoice_number: inv.InvoiceNumber,
-      amount_due: inv.AmountDue,
-      status: inv.Status,
-    }))
+    xero.setTokenSet({ access_token, refresh_token } as any);
 
-    const { error: insertError } = await supabase
-      .from("xero_invoices")
-      .insert(rows)
-
-    if (insertError) {
-      return NextResponse.json({ error: insertError.message }, { status: 500 })
-    }
-
-    return NextResponse.json({ inserted: rows.length })
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err)
-    return NextResponse.json({ error: message }, { status: 500 })
+    const result = await xero.accountingApi.getInvoices(tenant_id);
+    return NextResponse.json(result.body ?? {});
+  } catch (err: any) {
+    console.error("❌ Error fetching invoices:", err);
+    return NextResponse.json({ error: err?.message ?? "Unknown error" }, { status: 500 });
   }
 }
