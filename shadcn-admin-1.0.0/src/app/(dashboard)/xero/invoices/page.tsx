@@ -8,17 +8,32 @@ interface Invoice {
   amount_due: number | null
   status: string | null
 }
+interface XeroInvoice {
+  invoiceNumber?: string
+  amountDue?: number
+  status?: string
+}
 
 export default function XeroInvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [loading, setLoading] = useState(false)
 
-  const loadInvoices = () => {
-    fetch("/api/xero/invoices/fetch")
-      .then((res) => res.json())
-      .then((data) => setInvoices(data || []))
-      .catch(() => {})
-  }
+const loadInvoices = async () => {
+    try {
+      const res = await fetch("/api/xero/invoices")
+      const data = await res.json()
+      const list = Array.isArray(data?.invoices)
+        ? data.invoices.map((inv: XeroInvoice) => ({
+            invoice_number: inv.invoiceNumber ?? null,
+            amount_due: inv.amountDue ?? null,
+            status: inv.status ?? null,
+          }))
+        : []
+      setInvoices(list)
+    } catch {
+      setInvoices([])
+    }
+}
 
   useEffect(() => {
     loadInvoices()
@@ -26,8 +41,7 @@ export default function XeroInvoicesPage() {
 
   const syncInvoices = async () => {
     setLoading(true)
-    await fetch("/api/xero/invoices").catch(() => {})
-    loadInvoices()
+    await loadInvoices()
     setLoading(false)
   }
 

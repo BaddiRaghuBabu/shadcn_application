@@ -27,19 +27,22 @@ export default function Contacts() {
   const [loading, setLoading] = useState(false);
 
   const handleConnectXero = () => {
-    window.location.href = `${API_BASE}/connect`;
+    window.location.href = `${API_BASE}/api/xero/connect`;
   };
 
   const fetchAndSaveContacts = async () => {
     try {
       setLoading(true);
 
-      const saveRes = await fetch(`${API_BASE}/contacts`, { method: "GET" });
-      const saveData = await saveRes.json().catch(() => ({} as any));
+      const saveRes = await fetch(`${API_BASE}/api/xero/contacts`, { method: "GET" });
+      const saveData = await saveRes
+        .json()
+        .catch(() => ({} as Record<string, unknown>));
+
       if (!saveRes.ok) throw new Error(saveData?.message || "Failed to save contacts");
       toast.success(saveData?.message || "Contacts saved successfully ✅");
 
-      const listRes = await fetch(`${API_BASE}/view-contacts`, { method: "GET" });
+      const listRes = await fetch(`${API_BASE}/api/xero/fetch`, { method: "GET" });
       if (!listRes.ok) throw new Error("Failed to fetch contacts");
       const listData: Contact[] = await listRes.json();
       setContacts(Array.isArray(listData) ? listData : []);

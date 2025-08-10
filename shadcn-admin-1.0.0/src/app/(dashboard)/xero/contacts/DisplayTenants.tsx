@@ -26,6 +26,13 @@ type Contact = {
 const API_BASE =
   process.env.NEXT_PUBLIC_XERO_BACKEND_URL ?? "http://localhost:3300";
 
+function isAbortError(err: unknown): boolean {
+  return (
+    (err instanceof DOMException && err.name === "AbortError") ||
+    (err instanceof Error && err.name === "AbortError")
+  );
+}
+
 export default function DisplayTenants() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,7 +47,7 @@ export default function DisplayTenants() {
       const data: Contact[] = await res.json();
       setContacts(Array.isArray(data) ? data : []);
     } catch (e: unknown) {
-      if ((e as any)?.name === "AbortError") return;
+      if (isAbortError(e)) return; // ✅ no 'any'
       setError("Failed to fetch contacts.");
       setContacts([]);
     } finally {
@@ -70,7 +77,7 @@ export default function DisplayTenants() {
             <Skeleton className="h-4 w-1/2" />
             <Skeleton className="h-4 w-1/4" />
             <div className="mt-4 space-y-2">
-              {[...Array(5)].map((_, i) => (
+              {Array.from({ length: 5 }).map((_, i) => (
                 <Skeleton key={i} className="h-10 w-full" />
               ))}
             </div>

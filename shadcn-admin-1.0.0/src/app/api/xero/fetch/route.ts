@@ -1,9 +1,15 @@
-// src/app/api/xero/fetch/route.ts   // getContacts (minimal fields)
+// src/app/api/xero/fetch/route.ts  // getContacts (minimal fields, lint-safe)
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabaseClient";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+type ContactMinimal = {
+  name: string | null;
+  email: string | null;
+  is_customer: boolean | null;
+};
 
 export async function GET() {
   try {
@@ -13,12 +19,13 @@ export async function GET() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      throw error;
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json(data ?? []);
-  } catch (err: any) {
-    console.error("❌ Failed to fetch contacts:", err?.message ?? err);
-    return NextResponse.json({ error: err?.message ?? "Unknown error" }, { status: 500 });
+    const rows = (data ?? []) as ContactMinimal[];
+    return NextResponse.json(rows);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
