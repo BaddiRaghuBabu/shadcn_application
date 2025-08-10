@@ -15,6 +15,8 @@ import {
   IconUser,
   IconUserOff,
   IconUsers,
+  IconLink,
+
 } from "@tabler/icons-react"
 import { AudioWaveform, GalleryVerticalEnd } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -134,6 +136,11 @@ export const sidebarData: SidebarData = {
               title: "General",
               icon: IconTool,
               url: "/settings",
+            },
+              {
+              title: "API keys ",
+              icon: IconLink,
+              url: "/settings/xero",
             },
             {
               title: "Profile",

@@ -22,7 +22,7 @@ const sidebarNavItems = [
     href: "/settings/profile",
   },
     {
-    title: "Xero",
+    title: "API keys ",
     icon: <IconLink />,
     href: "/settings/xero",
   },

@@ -78,9 +78,9 @@ export async function POST(req: Request) {
         is_active,
         updated_at: new Date().toISOString(),
       },
-      { onConflict: "user_id,environment" }
+      { onConflict: "user_id" }
     )
-    .select("environment, client_id, redirect_uri, scopes, is_active")
+    .select("client_id, redirect_uri, scopes, is_active")
     .single()
 
   if (error) {
