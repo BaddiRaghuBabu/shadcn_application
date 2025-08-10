@@ -4,7 +4,7 @@ import {
   IconTool,
   IconUser,
   IconLock,
-
+  IconLink,
 
 } from "@tabler/icons-react"
 import { Header } from "@/components/layout/header"
@@ -20,6 +20,11 @@ const sidebarNavItems = [
     title: "Profile",
     icon: <IconUser />,
     href: "/settings/profile",
+  },
+    {
+    title: "Xero",
+    icon: <IconLink />,
+    href: "/settings/xero",
   },
     {
     title: "Password",

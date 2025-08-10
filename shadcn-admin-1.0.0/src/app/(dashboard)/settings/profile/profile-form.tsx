@@ -61,6 +61,8 @@ const schema = z.object({
     }),
   avatar: z.any().optional(),
   language: z.string(),
+  role: z.string().default("default"),
+
 })
 
 
@@ -78,6 +80,7 @@ export function AccountForm() {
       email: "",
       dob: "",
       language: "en",
+      role: "default",
       avatar: undefined,
     },
     mode: "onChange",
@@ -92,24 +95,27 @@ export function AccountForm() {
       if (!session) return
 
       form.setValue("email", session.user.email!)
-      const res = await fetch("/api/profile", {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      })
-      if (!res.ok) return
+      const { data: profile } = await supabase
+        .from("user_profiles")
+        .select("name, username, language, dob, avatar, role")
+        .eq("user_id", session.user.id)
+        .single()
 
-      const { profile } = await res.json()
       if (profile) {
         form.setValue("name", profile.name || "")
         form.setValue("username", profile.username || "")
         form.setValue("language", profile.language || "en")
-          const d = new Date(profile.dob)
-          const dd = String(d.getDate()).padStart(2, "0")
-          const mm = String(d.getMonth() + 1).padStart(2, "0")
-          const yyyy = d.getFullYear()
-          form.setValue("dob", `${dd}/${mm}/${yyyy}`)
-        }
+
+                form.setValue("role", profile.role || "default")
+        const d = new Date(profile.dob)
+        const dd = String(d.getDate()).padStart(2, "0")
+        const mm = String(d.getMonth() + 1).padStart(2, "0")
+        const yyyy = d.getFullYear()
+        form.setValue("dob", `${dd}/${mm}/${yyyy}`)
+
         if (profile.avatar) {
           setAvatarPreview(profile.avatar)
+      }
       }
     })()
   }, [form])
@@ -203,6 +209,20 @@ export function AccountForm() {
                 <FormLabel>Email</FormLabel>
                 <FormControl>
                   <Input readOnly {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+                    <FormField
+            control={form.control}
+            name="role"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Role</FormLabel>
+                <FormControl>
+                  <Input readOnly {...field} /> 
                 </FormControl>
                 <FormMessage />
               </FormItem>
