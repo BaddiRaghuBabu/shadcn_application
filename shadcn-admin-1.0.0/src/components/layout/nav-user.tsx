@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
-import { BadgeCheck, Bell, PowerOff, ChevronsUpDown } from "lucide-react"
+import { BadgeCheck, Bell, PowerOff, ChevronsUpDown, Link as LinkIcon } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
@@ -98,6 +98,14 @@ export function NavUser() {
       clearInterval(interval)
     };
   }, [router]);
+  
+    const connectXero = () => {
+    try {
+      window.location.href = "/api/xero/connect"
+    } catch {
+      toast.error("Failed to connect Xero")
+    }
+  }
 
   const logout = async () => {
     if (loading) return
@@ -231,6 +239,15 @@ export function NavUser() {
                   Notifications
                 </Link>
               </DropdownMenuItem>
+              
+              <DropdownMenuItem
+                onClick={() => void connectXero()}
+                className="flex cursor-pointer items-center"
+              >
+                <LinkIcon className="mr-2 size-4" />
+                Connect Xero
+              </DropdownMenuItem>
+
             </DropdownMenuGroup>
 
             <DropdownMenuSeparator />

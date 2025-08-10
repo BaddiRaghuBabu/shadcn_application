@@ -23,6 +23,14 @@ export interface XeroContact {
   IsSupplier: boolean
 }
 
+export interface XeroInvoice {
+  InvoiceID: string
+  InvoiceNumber: string
+  AmountDue: number
+  Status: string
+
+}
+
 export const xero = {
   async buildConsentUrl(): Promise<string> {
     const params = new URLSearchParams({
@@ -96,6 +104,27 @@ export const xero = {
 
     const data = await res.json()
     return (data.Contacts as XeroContact[]) ?? []
+  },
+  
+  async getInvoices(
+    accessToken: string,
+    tenantId: string
+  ): Promise<XeroInvoice[]> {
+    const res = await fetch("https://api.xero.com/api.xro/2.0/Invoices", {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Xero-tenant-id": tenantId,
+        Accept: "application/json",
+      },
+    })
+
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(`Failed to fetch invoices: ${text}`)
+    }
+
+    const data = await res.json()
+    return (data.Invoices as XeroInvoice[]) ?? []
   },
 }
 

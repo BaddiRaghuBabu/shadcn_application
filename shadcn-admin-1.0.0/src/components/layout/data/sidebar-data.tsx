@@ -85,6 +85,11 @@ export const sidebarData: SidebarData = {
           url: "/xero/contacts",
           icon: IconUsers,
         },
+        {
+          title: "Xero Invoices",
+          url: "/xero/invoices",
+          icon: IconCoin,
+        }
       ],
     },
     {
