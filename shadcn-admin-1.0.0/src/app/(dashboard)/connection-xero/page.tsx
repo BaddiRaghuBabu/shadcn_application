@@ -47,6 +47,7 @@ type XeroStatus = {
   clientConfigured?: boolean;
 };
 
+const POLL_MS = 20000;
 
 const RECOMMENDED_SCOPES = [
   "openid",
@@ -68,54 +69,62 @@ export default function XeroPage() {
   const [scopes, setScopes] = useState<string[]>(RECOMMENDED_SCOPES);
   const [scopesOpen, setScopesOpen] = useState(false);
 
-const fetchStatus = () => {
-    const storedCode = window.localStorage.getItem("xero_code");
-    if (storedCode) {
-      setStatus("connected");
-      setData({ connected: true });
-    } else {
+  const fetchStatus = async () => {
+    try {
+      const res = await fetch("/api/xero/status", { cache: "no-store" });
+      if (!res.ok) throw new Error("Status failed");
+      const j: XeroStatus = await res.json();
+      setData(j);
+      setStatus(j.connected ? "connected" : "disconnected");
+      if (j.scopes?.length) setScopes(j.scopes);
+      if (j.environment === "sandbox" || j.environment === "live") setEnv(j.environment);
+    } catch {
       setStatus("disconnected");
-      setData(null);
-
     }
   };
 
   useEffect(() => {
     fetchStatus();
+    const id = setInterval(fetchStatus, POLL_MS);
+    return () => clearInterval(id);
   }, []);
 
   // handle OAuth callback message
   useEffect(() => {
-    const code = sp.get("code");
-    if (code) {
-      window.localStorage.setItem("xero_code", code);
+    const m = sp.get("connected");
+    if (m === "1") {
       toast.success("Connected to Xero");
       fetchStatus();
-      router.replace("/connection-xero");
-
     }
-  }, [sp, router]);
+  }, [sp]);
 
   const handleConnect = () => {
-    const params = new URLSearchParams({
-      response_type: "code",
-      client_id: process.env.XERO_CLIENT_ID || "",
-      redirect_uri: process.env.XERO_REDIRECT_URI || window.location.origin + "/connection-xero",
-      scope: scopes.join(" "),
-      state: env,
-    });
-    window.location.href = `https://login.xero.com/identity/connect/authorize?${params.toString()}`;
+    const u = new URL(window.location.origin + "/api/xero/connect");
+    u.searchParams.set("env", env);
+    // Optionally pass scopes selection to backend
+    u.searchParams.set("scopes", scopes.join(" "));
+    window.location.href = u.toString();
   };
 
-    const handleDisconnect = () => {
-    window.localStorage.removeItem("xero_code");
-    toast("Disconnected");
-    fetchStatus();
-
+  const handleDisconnect = async () => {
+    const res = await fetch("/api/xero/disconnect", { method: "POST" });
+    if (res.ok) {
+      toast("Disconnected");
+      fetchStatus();
+    } else {
+      toast.error("Failed to disconnect");
+    }
   };
 
-  const handlePing = () => {
-    toast("Ping not implemented");
+  const handlePing = async () => {
+    try {
+      const res = await fetch("/api/xero/ping", { cache: "no-store" });
+      const j = await res.json();
+      if (res.ok) toast.success("API OK: " + (j?.message ?? "Success"));
+      else toast.error(j?.error ?? "Xero ping failed");
+    } catch {
+      toast.error("Xero ping failed");
+    }
   };
 
   const lastSync = useMemo(() => formatWhen(data?.lastSyncAt), [data?.lastSyncAt]);
@@ -142,7 +151,7 @@ const fetchStatus = () => {
             variant="secondary"
             className="h-12 rounded-xl border bg-muted px-5 text-base font-medium"
             onClick={handleConnect}
-            disabled={status === "loading"}
+             disabled={status === "loading"}
           >
             <Link2 className="mr-2 h-5 w-5" />
             {status === "connected" ? "Reconnect to Xero" : "Connect to Xero"}
