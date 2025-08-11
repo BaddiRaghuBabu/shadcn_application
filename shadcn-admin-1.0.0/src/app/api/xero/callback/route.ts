@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
 
     if (!tenantId) {
       return NextResponse.redirect(
-        new URL("/xero?error=no_tenant_found", req.url)
+        new URL("/connection-xero?error=no_tenant_found", req.url)
       );
     }
 
@@ -41,16 +41,16 @@ export async function GET(req: NextRequest) {
 
     if (error) {
       return NextResponse.redirect(
-        new URL(`/xero?error=save_failed`, req.url)
+        new URL(`/connection-xero?error=save_failed`, req.url)
       );
     }
 
     // Success
-    return NextResponse.redirect(new URL("/xero?connected=1", req.url));
+    return NextResponse.redirect(new URL("/connection-xero?connected=1", req.url));
   } catch (err) {
     const detail = err instanceof Error ? err.message : "unknown_error";
     return NextResponse.redirect(
-      new URL(`/xero?error=${encodeURIComponent(detail)}`, req.url)
+      new URL(`/connection-xero?error=${encodeURIComponent(detail)}`, req.url)
     );
   }
 }
