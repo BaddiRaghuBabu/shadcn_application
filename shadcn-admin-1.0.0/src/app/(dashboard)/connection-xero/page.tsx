@@ -47,6 +47,7 @@ type XeroStatus = {
   clientConfigured?: boolean;
 };
 
+
 const RECOMMENDED_SCOPES = [
   "openid",
   "profile",
@@ -56,13 +57,6 @@ const RECOMMENDED_SCOPES = [
   "accounting.settings",
   "accounting.transactions",
 ];
-
-// ——— Read PUBLIC envs (these are inlined into the client bundle) ———
-const PUBLIC_CLIENT_ID = process.env.NEXT_PUBLIC_XERO_CLIENT_ID ?? "";
-const PUBLIC_SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "";
-const PUBLIC_REDIRECT_URI =
-  process.env.NEXT_PUBLIC_XERO_REDIRECT_URI ??
-  (PUBLIC_SITE_URL ? `${PUBLIC_SITE_URL}/api/xero/callback` : "");
 
 export default function XeroPage() {
   const router = useRouter();
@@ -74,8 +68,7 @@ export default function XeroPage() {
   const [scopes, setScopes] = useState<string[]>(RECOMMENDED_SCOPES);
   const [scopesOpen, setScopesOpen] = useState(false);
 
-  // Fake “status” using localStorage token (demo)
-  const fetchStatus = () => {
+const fetchStatus = () => {
     const storedCode = window.localStorage.getItem("xero_code");
     if (storedCode) {
       setStatus("connected");
@@ -83,52 +76,42 @@ export default function XeroPage() {
     } else {
       setStatus("disconnected");
       setData(null);
+
     }
   };
 
   useEffect(() => {
-    if (!PUBLIC_CLIENT_ID || !PUBLIC_REDIRECT_URI) {
-      console.warn("Xero env missing: NEXT_PUBLIC_XERO_CLIENT_ID or NEXT_PUBLIC_XERO_REDIRECT_URI / SITE_URL");
-    }
     fetchStatus();
   }, []);
 
-  // Handle OAuth callback when Xero redirects back with ?code=
+  // handle OAuth callback message
   useEffect(() => {
     const code = sp.get("code");
     if (code) {
       window.localStorage.setItem("xero_code", code);
       toast.success("Connected to Xero");
       fetchStatus();
-      // Send them to your summary or dashboard after connecting
       router.replace("/connection-xero");
+
     }
   }, [sp, router]);
 
   const handleConnect = () => {
-    if (!PUBLIC_CLIENT_ID) {
-      toast.error("Missing NEXT_PUBLIC_XERO_CLIENT_ID");
-      return;
-    }
-    const redirectUri =
-      PUBLIC_REDIRECT_URI ||
-      `${window.location.origin}/api/xero/callback`; // final fallback
-
     const params = new URLSearchParams({
       response_type: "code",
-      client_id: PUBLIC_CLIENT_ID,
-      redirect_uri: redirectUri,
+      client_id: process.env.XERO_CLIENT_ID || "",
+      redirect_uri: process.env.XERO_REDIRECT_URI || window.location.origin + "/connection-xero",
       scope: scopes.join(" "),
       state: env,
     });
-
     window.location.href = `https://login.xero.com/identity/connect/authorize?${params.toString()}`;
   };
 
-  const handleDisconnect = () => {
+    const handleDisconnect = () => {
     window.localStorage.removeItem("xero_code");
     toast("Disconnected");
     fetchStatus();
+
   };
 
   const handlePing = () => {
@@ -145,7 +128,6 @@ export default function XeroPage() {
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4" />
         </div>
-
         <header className="mb-6">
           <h1 className="text-4xl sm:text-5xl font-bold tracking-tight">Xero Contact Sync</h1>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -241,8 +223,16 @@ export default function XeroPage() {
           <Separator />
 
           <CardContent className="grid gap-4 py-6 sm:grid-cols-2">
-            <InfoRow label="Tenant" value={data?.tenantName ? data.tenantName : "—"} icon={<PlugZap className="h-4 w-4" />} />
-            <InfoRow label="Environment" value={data?.environment ? String(data.environment).toUpperCase() : env.toUpperCase()} icon={<Building2 className="h-4 w-4" />} />
+            <InfoRow
+              label="Tenant"
+              value={data?.tenantName ? data.tenantName : "—"}
+              icon={<PlugZap className="h-4 w-4" />}
+            />
+            <InfoRow
+              label="Environment"
+              value={data?.environment ? String(data.environment).toUpperCase() : env.toUpperCase()}
+              icon={<Building2 className="h-4 w-4" />}
+            />
             <InfoRow label="Token expires" value={tokenExp} icon={<Power className="h-4 w-4" />} />
             <InfoRow label="Last sync" value={lastSync} icon={<Signal className="h-4 w-4" />} />
             <InfoRow label="Scopes" value={scopes.join(" ")} icon={<Shield className="h-4 w-4" />} className="sm:col-span-2" />
@@ -313,7 +303,11 @@ export default function XeroPage() {
               <label key={s} className="flex items-center gap-3">
                 <Checkbox
                   checked={scopes.includes(s)}
-                  onCheckedChange={(v) => setScopes((prev) => (v ? [...prev, s] : prev.filter((x) => x !== s)))}
+                  onCheckedChange={(v) =>
+                    setScopes((prev) =>
+                      v ? [...prev, s] : prev.filter((x) => x !== s),
+                    )
+                  }
                 />
                 <span className="text-sm">{s}</span>
               </label>
