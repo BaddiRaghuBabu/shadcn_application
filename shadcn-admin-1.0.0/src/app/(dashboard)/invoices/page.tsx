@@ -19,12 +19,15 @@ import {
   ArrowUpDown,
   Columns,
   ExternalLink,
+
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { supabase } from "@/lib/supabaseClient";
+
 import {
   Table,
   TableBody,
@@ -87,27 +90,7 @@ const STATUS_ORDER: Record<InvoiceStatus, number> = {
   VOIDED: 4,
 };
 
-/* ───────────────────── Demo data (5 rows) ───────────────────── */
 
-const seed: Invoice[] = [
-  inv("INV-1008", "Acme Corp", "anita@acme.example", "INR", -20, 10, "AUTHORISED", 38500, 38500, "PO-5568", [
-    line("Installation services", 1, 20000),
-    line("Hardware kit", 5, 3700),
-  ]),
-  inv("INV-1009", "Blue Ocean Pvt Ltd", "payables@blueocean.example", "INR", -35, -5, "PAID", 12800, 0, null, [
-    line("Annual subscription", 1, 12800),
-  ]),
-  inv("INV-1010", "Globex LLC", "ap@globex.example", "USD", -6, 24, "DRAFT", 7600, 7600, "Ref-GLX-24", [
-    line("Consulting (May)", 16, 350),
-  ]),
-  inv("INV-1011", "Wayne Enterprises", "billing@wayne.example", "USD", -14, -1, "AUTHORISED", 87500, 12500, "Wayne-PO-9", [
-    line("R&D Retainer", 1, 75000),
-    line("On-site support", 10, 1250),
-  ]),
-  inv("INV-1012", "Stark Industries", "tony@stark.example", "USD", -2, 28, "SUBMITTED", 56000, 56000, "SI-APR", [
-    line("Prototype fabrication", 2, 28000),
-  ]),
-];
 
 /* ───────────────────── Page (READ-ONLY) ───────────────────── */
 
@@ -144,11 +127,33 @@ export default function InvoicesReadOnlyPage() {
   });
 
   useEffect(() => {
-    const t = setTimeout(() => {
-      setInvoices(seed);
+       const load = async () => {
+      const { data, error } = await supabase
+        .from("xero_invoices")
+        .select("invoice_id, invoice_number, amount_due, status, created_at");
+      if (error) {
+        toast.error("Failed to load invoices");
+        setInvoices([]);
+      } else {
+        const mapped: Invoice[] = data.map((inv) => ({
+          id: inv.invoice_id,
+          number: inv.invoice_number ?? "",
+          contact: "",
+          email: null,
+          currency: "",
+          date: "",
+          dueDate: "",
+          status: (inv.status as InvoiceStatus) ?? "DRAFT",
+          amount: Number(inv.amount_due ?? 0),
+          balance: Number(inv.amount_due ?? 0),
+          reference: null,
+          updatedAt: inv.created_at ?? new Date().toISOString(),
+          link: null,
+        }));
+        setInvoices(mapped);
+      }}
       setLoading(false);
-    }, 300);
-    return () => clearTimeout(t);
+    load();
   }, []);
 
   const filtered = useMemo(() => {
@@ -637,38 +642,7 @@ function headerLabel(k: keyof Invoice | string) {
   return map[k] ?? String(k);
 }
 
-function inv(
-  number: string,
-  contact: string,
-  email: string,
-  currency: string,
-  dateOffset: number,
-  dueOffset: number,
-  status: InvoiceStatus,
-  amount: number,
-  balance: number,
-  reference?: string | null,
-  lines?: Line[],
-): Invoice {
-  const date = toISO(dateOffset);
-  const dueDate = toISO(dueOffset);
-  return {
-    id: Math.random().toString(36).slice(2),
-    number,
-    contact,
-    email,
-    currency,
-    date,
-    dueDate,
-    status,
-    amount,
-    balance,
-    reference: reference ?? null,
-    updatedAt: new Date(Date.now() - Math.floor(Math.random() * 10) * 86_400_000).toISOString(),
-    link: null,
-    lines: lines?.map((l) => ({ ...l })),
-  };
-}
+
 
 function line(description: string, qty: number, unit: number): Line {
   return { description, quantity: qty, unitAmount: unit, lineAmount: Math.round(qty * unit * 100) / 100 };

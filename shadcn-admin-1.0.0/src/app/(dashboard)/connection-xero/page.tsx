@@ -9,7 +9,7 @@ import {
   XCircle,
   Loader2,
   Link2,
-  Database,
+  ClipboardList,
   PlugZap,
   RefreshCw,
   Building2,
@@ -22,6 +22,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectTrigger,
@@ -146,6 +152,19 @@ export default function XeroPage() {
   };
 
 
+   const handleSync = async (resource: "contacts" | "invoices") => {
+    try {
+      const res = await fetch(`/api/xero/${resource}`, { cache: "no-store" });
+      if (!res.ok) throw new Error("Sync failed");
+      toast.success(`${resource === "contacts" ? "Contacts" : "Invoices"} synced`);
+      router.push(`/${resource}`);
+    } catch {
+      toast.error(`Failed to sync ${resource}`);
+    }
+  };
+
+
+
   const handlePing = async () => {
     try {
       const res = await fetch("/api/xero/ping", { cache: "no-store" });
@@ -187,14 +206,26 @@ export default function XeroPage() {
             {status === "connected" ? "Reconnect to Xero" : "Connect to Xero"}
           </Button>
 
-          <Button
-            type="button"
-            className="h-12 rounded-xl px-5 text-base font-medium"
-            onClick={() => router.push("/xero/summary")}
-          >
-            <Database className="mr-2 h-5 w-5" />
-            Fetched &amp; Contacts Summary
-          </Button>
+      <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                className="h-12 rounded-xl px-5 text-base font-medium"
+              >
+                <ClipboardList className="mr-2 h-5 w-5" />
+                Sync from Xero
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem onClick={() => handleSync("contacts")}>
+                Contacts
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleSync("invoices")}>
+                Invoices
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
 
           <TooltipProvider>
             <Tooltip>

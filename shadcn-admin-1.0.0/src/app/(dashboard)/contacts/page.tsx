@@ -55,6 +55,8 @@ import {
 } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import { supabase } from "@/lib/supabaseClient";
+
 
 /* ────────────────── Types ────────────────── */
 
@@ -87,16 +89,6 @@ type ViewState = {
   sortDir: "asc" | "desc";
   pageSize: number;
 };
-
-/* ─────────── Small demo data (5 rows) ─────────── */
-
-const seed: Contact[] = [
-  c("Acme Corp", "Anita Iyer", "anita@acme.example", "+91 90000 11111", "India", ["VIP"], true, false, false, 53000),
-  c("Globex LLC", "Sarah Lee", "sarah@globex.example", "+1 415 555 9911", "United States", ["Strategic"], true, false, false, 1200),
-  c("Initech", "Peter Gibbons", "", "+1 206 555 1234", "United States", ["Software"], false, true, false, 0),
-  c("Soylent Co", "Priya Menon", "priya@soylent.example", "", "Singapore", ["APAC"], true, false, false, 300),
-  c("Tata Motors", "Asha Reddy", "asha@tata.example", "+91 90000 33333", "India", ["Auto"], true, false, false, 1500),
-];
 
 /* ────────────────── Page (READ ONLY) ────────────────── */
 
@@ -147,13 +139,36 @@ export default function ContactsReadOnlyPage() {
     };
   }, [searchInput]);
 
-  // Load demo
+  // Load contacts from Supabase
   useEffect(() => {
-    const t = setTimeout(() => {
-      setContacts(seed);
+  
+  const load = async () => {
+      const { data, error } = await supabase
+        .from("xero_contacts")
+        .select("contact_id, name, email, is_customer, is_supplier");
+      if (error) {
+        toast.error("Failed to load contacts");
+        setContacts([]);
+      } else {
+        const mapped: Contact[] = data.map((c) => ({
+          id: c.contact_id,
+          name: c.name ?? "",
+          company: null,
+          email: c.email ?? null,
+          phone: null,
+          country: null,
+          tags: [],
+          isCustomer: c.is_customer ?? false,
+          isSupplier: c.is_supplier ?? false,
+          isArchived: false,
+          updatedAt: new Date().toISOString(),
+          balance: 0,
+        }));
+        setContacts(mapped);
+      }
       setLoading(false);
-    }, 250);
-    return () => clearTimeout(t);
+      };
+    load();
   }, []);
 
   // Derived lists
@@ -858,35 +873,7 @@ function TypeBadge({ contact }: { contact: Contact }) {
   );
 }
 
-/* ────────────────── Utils ────────────────── */
 
-function c(
-  company: string,
-  name: string,
-  email: string,
-  phone: string,
-  country: string,
-  tags: string[],
-  isCustomer: boolean,
-  isSupplier: boolean,
-  isArchived: boolean,
-  balance: number,
-): Contact {
-  return {
-    id: Math.random().toString(36).slice(2),
-    name,
-    company,
-    email: email || null,
-    phone: phone || null,
-    country,
-    tags,
-    isCustomer,
-    isSupplier,
-    isArchived,
-    updatedAt: new Date(Date.now() - Math.floor(Math.random() * 10) * 86_400_000).toISOString(),
-    balance,
-  };
-}
 
 function typeLabel(t: TypeFilter) {
   switch (t) {
