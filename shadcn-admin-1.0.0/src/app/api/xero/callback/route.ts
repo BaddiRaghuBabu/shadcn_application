@@ -15,8 +15,15 @@ type TokenSetLike = {
 export async function GET(req: NextRequest) {
   try {
     const url = req.nextUrl.toString();
+        // eslint-disable-next-line no-console
+    console.log("Xero callback invoked:", url);
 
     const tokenSet = (await xero.apiCallback(url)) as TokenSetLike;
+        // eslint-disable-next-line no-console
+    console.log("Token set received:", {
+      hasAccess: Boolean(tokenSet.access_token),
+      hasRefresh: Boolean(tokenSet.refresh_token),
+    });
 
     await xero.updateTenants();
 
