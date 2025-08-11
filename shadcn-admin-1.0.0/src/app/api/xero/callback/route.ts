@@ -1,27 +1,56 @@
+// src/app/api/xero/callback/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { xero } from "@/lib/xeroService";
 import { getSupabaseAdminClient } from "@/lib/supabaseClient";
 
-// Handles OAuth callback and exchanges code for tokens at
-// https://identity.xero.com/connect/token
+/**
+ * OAuth2 callback:
+ * - Exchanges code for tokens
+ * - Finds first tenant (organisation)
+ * - Upserts { tenant_id, access_token, refresh_token } into `xero_tokens`
+ * - Redirects back to /xero?connected=1
+ */
 export async function GET(req: NextRequest) {
-  const tokenSet = await xero.apiCallback(req.url);
-  xero.setTokenSet(tokenSet);
+  try {
+    // Exchange authorization code for tokens
+    const tokenSet = await xero.apiCallback(req.url);
+    xero.setTokenSet(tokenSet);
 
-  const tenants = await xero.updateTenants();
-  const tenantId = tenants[0]?.tenantId;
+    // Determine tenant ID (first tenant)
+    const tenants = await xero.updateTenants();
+    const tenantId = tenants?.[0]?.tenantId;
 
-  if (tenantId) {
+    if (!tenantId) {
+      return NextResponse.redirect(
+        new URL("/xero?error=no_tenant_found", req.url)
+      );
+    }
+
+    // Persist tokens
     const supabase = getSupabaseAdminClient();
-    await supabase.from("xero_tokens").upsert(
-      {
-        tenant_id: tenantId,
-        access_token: tokenSet.access_token!,
-        refresh_token: tokenSet.refresh_token!,
-      },
-      { onConflict: "tenant_id" }
+    const { error } = await supabase
+      .from("xero_tokens")
+      .upsert(
+        {
+          tenant_id: tenantId,
+          access_token: tokenSet.access_token!,
+          refresh_token: tokenSet.refresh_token!,
+        },
+        { onConflict: "tenant_id" }
+      );
+
+    if (error) {
+      return NextResponse.redirect(
+        new URL(`/xero?error=save_failed`, req.url)
+      );
+    }
+
+    // Success
+    return NextResponse.redirect(new URL("/xero?connected=1", req.url));
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "unknown_error";
+    return NextResponse.redirect(
+      new URL(`/xero?error=${encodeURIComponent(detail)}`, req.url)
     );
   }
-
-  return NextResponse.redirect("/settings/xero");
 }

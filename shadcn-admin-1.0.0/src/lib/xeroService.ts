@@ -1,11 +1,10 @@
 // src/lib/xeroService.ts
 import { XeroClient } from "xero-node";
 
-const scopes =
-  (process.env.XERO_SCOPES ??
-    "openid profile email offline_access accounting.contacts accounting.transactions").split(
-    " ",
-  );
+const scopes = (
+  process.env.XERO_SCOPES ??
+  "openid profile email offline_access accounting.contacts accounting.transactions accounting.settings"
+).split(" ");
 
 export const xero = new XeroClient({
   clientId: process.env.XERO_CLIENT_ID!,

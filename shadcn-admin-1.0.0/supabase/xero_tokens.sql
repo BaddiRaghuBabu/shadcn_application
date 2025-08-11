@@ -6,3 +6,4 @@ create table if not exists xero_tokens (
   refresh_token text not null,
   created_at timestamptz not null default now()
 );
+

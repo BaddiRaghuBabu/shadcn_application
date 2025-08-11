@@ -69,6 +69,7 @@ export default function XeroPage() {
   const [scopes, setScopes] = useState<string[]>(RECOMMENDED_SCOPES);
   const [scopesOpen, setScopesOpen] = useState(false);
 
+  // optional: implement this if you have /api/xero/status
   const fetchStatus = async () => {
     try {
       const res = await fetch("/api/xero/status", { cache: "no-store" });
@@ -84,6 +85,7 @@ export default function XeroPage() {
   };
 
   useEffect(() => {
+    // optional: comment out if /api/xero/status not implemented
     fetchStatus();
     const id = setInterval(fetchStatus, POLL_MS);
     return () => clearInterval(id);
@@ -92,26 +94,38 @@ export default function XeroPage() {
   // handle OAuth callback message
   useEffect(() => {
     const m = sp.get("connected");
+    const e = sp.get("error");
     if (m === "1") {
       toast.success("Connected to Xero");
-      fetchStatus();
+      // optional refresh
+      fetchStatus().catch(() => {});
+      window.history.replaceState({}, "", window.location.pathname);
+    } else if (e) {
+      toast.error(e);
+      window.history.replaceState({}, "", window.location.pathname);
     }
   }, [sp]);
 
   const handleConnect = () => {
     const u = new URL(window.location.origin + "/api/xero/connect");
-    u.searchParams.set("env", env);
     // Optionally pass scopes selection to backend
     u.searchParams.set("scopes", scopes.join(" "));
+    // env is optional and unused by backend here
+    u.searchParams.set("env", env);
     window.location.href = u.toString();
   };
 
   const handleDisconnect = async () => {
-    const res = await fetch("/api/xero/disconnect", { method: "POST" });
-    if (res.ok) {
-      toast("Disconnected");
-      fetchStatus();
-    } else {
+    try {
+      const res = await fetch("/api/xero/disconnect", { method: "POST" });
+      if (res.ok) {
+        toast("Disconnected");
+        fetchStatus().catch(() => {});
+      } else {
+        const j = await res.json().catch(() => ({}));
+        toast.error(j?.error ?? "Failed to disconnect");
+      }
+    } catch {
       toast.error("Failed to disconnect");
     }
   };
@@ -151,7 +165,7 @@ export default function XeroPage() {
             variant="secondary"
             className="h-12 rounded-xl border bg-muted px-5 text-base font-medium"
             onClick={handleConnect}
-             disabled={status === "loading"}
+            disabled={status === "loading"}
           >
             <Link2 className="mr-2 h-5 w-5" />
             {status === "connected" ? "Reconnect to Xero" : "Connect to Xero"}
@@ -313,9 +327,7 @@ export default function XeroPage() {
                 <Checkbox
                   checked={scopes.includes(s)}
                   onCheckedChange={(v) =>
-                    setScopes((prev) =>
-                      v ? [...prev, s] : prev.filter((x) => x !== s),
-                    )
+                    setScopes((prev) => (v ? [...prev, s] : prev.filter((x) => x !== s)))
                   }
                 />
                 <span className="text-sm">{s}</span>
@@ -327,6 +339,7 @@ export default function XeroPage() {
             <Button
               onClick={() => {
                 setScopesOpen(false);
+                // No backend call here; connect route reads scopes via querystring
                 toast.success("Scopes updated");
               }}
             >
