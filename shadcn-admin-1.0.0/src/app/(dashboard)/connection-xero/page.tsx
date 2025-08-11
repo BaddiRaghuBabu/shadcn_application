@@ -47,8 +47,6 @@ type XeroStatus = {
   clientConfigured?: boolean;
 };
 
-const POLL_MS = 20000;
-
 const RECOMMENDED_SCOPES = [
   "openid",
   "profile",
@@ -58,6 +56,13 @@ const RECOMMENDED_SCOPES = [
   "accounting.settings",
   "accounting.transactions",
 ];
+
+// ——— Read PUBLIC envs (these are inlined into the client bundle) ———
+const PUBLIC_CLIENT_ID = process.env.NEXT_PUBLIC_XERO_CLIENT_ID ?? "";
+const PUBLIC_SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "";
+const PUBLIC_REDIRECT_URI =
+  process.env.NEXT_PUBLIC_XERO_REDIRECT_URI ??
+  (PUBLIC_SITE_URL ? `${PUBLIC_SITE_URL}/api/xero/callback` : "");
 
 export default function XeroPage() {
   const router = useRouter();
@@ -69,62 +74,65 @@ export default function XeroPage() {
   const [scopes, setScopes] = useState<string[]>(RECOMMENDED_SCOPES);
   const [scopesOpen, setScopesOpen] = useState(false);
 
-  const fetchStatus = async () => {
-    try {
-      const res = await fetch("/api/xero/status", { cache: "no-store" });
-      if (!res.ok) throw new Error("Status failed");
-      const j: XeroStatus = await res.json();
-      setData(j);
-      setStatus(j.connected ? "connected" : "disconnected");
-      if (j.scopes?.length) setScopes(j.scopes);
-      if (j.environment === "sandbox" || j.environment === "live") setEnv(j.environment);
-    } catch {
+  // Fake “status” using localStorage token (demo)
+  const fetchStatus = () => {
+    const storedCode = window.localStorage.getItem("xero_code");
+    if (storedCode) {
+      setStatus("connected");
+      setData({ connected: true });
+    } else {
       setStatus("disconnected");
+      setData(null);
     }
   };
 
   useEffect(() => {
+    if (!PUBLIC_CLIENT_ID || !PUBLIC_REDIRECT_URI) {
+      console.warn("Xero env missing: NEXT_PUBLIC_XERO_CLIENT_ID or NEXT_PUBLIC_XERO_REDIRECT_URI / SITE_URL");
+    }
     fetchStatus();
-    const id = setInterval(fetchStatus, POLL_MS);
-    return () => clearInterval(id);
   }, []);
 
-  // handle OAuth callback message
+  // Handle OAuth callback when Xero redirects back with ?code=
   useEffect(() => {
-    const m = sp.get("connected");
-    if (m === "1") {
+    const code = sp.get("code");
+    if (code) {
+      window.localStorage.setItem("xero_code", code);
       toast.success("Connected to Xero");
       fetchStatus();
+      // Send them to your summary or dashboard after connecting
+      router.replace("/connection-xero");
     }
-  }, [sp]);
+  }, [sp, router]);
 
   const handleConnect = () => {
-    const u = new URL(window.location.origin + "/api/xero/connect");
-    u.searchParams.set("env", env);
-    // Optionally pass scopes selection to backend
-    u.searchParams.set("scopes", scopes.join(" "));
-    window.location.href = u.toString();
+    if (!PUBLIC_CLIENT_ID) {
+      toast.error("Missing NEXT_PUBLIC_XERO_CLIENT_ID");
+      return;
+    }
+    const redirectUri =
+      PUBLIC_REDIRECT_URI ||
+      `${window.location.origin}/api/xero/callback`; // final fallback
+
+    const params = new URLSearchParams({
+      response_type: "code",
+      client_id: PUBLIC_CLIENT_ID,
+      redirect_uri: redirectUri,
+      scope: scopes.join(" "),
+      state: env,
+    });
+
+    window.location.href = `https://login.xero.com/identity/connect/authorize?${params.toString()}`;
   };
 
-  const handleDisconnect = async () => {
-    const res = await fetch("/api/xero/disconnect", { method: "POST" });
-    if (res.ok) {
-      toast("Disconnected");
-      fetchStatus();
-    } else {
-      toast.error("Failed to disconnect");
-    }
+  const handleDisconnect = () => {
+    window.localStorage.removeItem("xero_code");
+    toast("Disconnected");
+    fetchStatus();
   };
 
-  const handlePing = async () => {
-    try {
-      const res = await fetch("/api/xero/ping", { cache: "no-store" });
-      const j = await res.json();
-      if (res.ok) toast.success("API OK: " + (j?.message ?? "Success"));
-      else toast.error(j?.error ?? "Xero ping failed");
-    } catch {
-      toast.error("Xero ping failed");
-    }
+  const handlePing = () => {
+    toast("Ping not implemented");
   };
 
   const lastSync = useMemo(() => formatWhen(data?.lastSyncAt), [data?.lastSyncAt]);
@@ -137,6 +145,7 @@ export default function XeroPage() {
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4" />
         </div>
+
         <header className="mb-6">
           <h1 className="text-4xl sm:text-5xl font-bold tracking-tight">Xero Contact Sync</h1>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -232,16 +241,8 @@ export default function XeroPage() {
           <Separator />
 
           <CardContent className="grid gap-4 py-6 sm:grid-cols-2">
-            <InfoRow
-              label="Tenant"
-              value={data?.tenantName ? data.tenantName : "—"}
-              icon={<PlugZap className="h-4 w-4" />}
-            />
-            <InfoRow
-              label="Environment"
-              value={data?.environment ? String(data.environment).toUpperCase() : env.toUpperCase()}
-              icon={<Building2 className="h-4 w-4" />}
-            />
+            <InfoRow label="Tenant" value={data?.tenantName ? data.tenantName : "—"} icon={<PlugZap className="h-4 w-4" />} />
+            <InfoRow label="Environment" value={data?.environment ? String(data.environment).toUpperCase() : env.toUpperCase()} icon={<Building2 className="h-4 w-4" />} />
             <InfoRow label="Token expires" value={tokenExp} icon={<Power className="h-4 w-4" />} />
             <InfoRow label="Last sync" value={lastSync} icon={<Signal className="h-4 w-4" />} />
             <InfoRow label="Scopes" value={scopes.join(" ")} icon={<Shield className="h-4 w-4" />} className="sm:col-span-2" />
@@ -312,11 +313,7 @@ export default function XeroPage() {
               <label key={s} className="flex items-center gap-3">
                 <Checkbox
                   checked={scopes.includes(s)}
-                  onCheckedChange={(v) =>
-                    setScopes((prev) =>
-                      v ? [...prev, s] : prev.filter((x) => x !== s),
-                    )
-                  }
+                  onCheckedChange={(v) => setScopes((prev) => (v ? [...prev, s] : prev.filter((x) => x !== s)))}
                 />
                 <span className="text-sm">{s}</span>
               </label>
