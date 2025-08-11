@@ -80,16 +80,6 @@ export const sidebarData: SidebarData = {
           icon: IconUsers,
           roles: ["admin", "superadmin"],
         },
-           {
-          title: "Xero Contacts",
-          url: "/xero/contacts",
-          icon: IconUsers,
-        },
-        {
-          title: "Xero Invoices",
-          url: "/xero/invoices",
-          icon: IconCoin,
-        }
       ],
     },
     {
