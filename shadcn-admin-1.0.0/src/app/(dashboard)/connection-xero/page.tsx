@@ -130,6 +130,22 @@ export default function XeroPage() {
     }
   };
 
+  const handleRefreshToken = async () => {
+    try {
+      const res = await fetch("/api/xero/refresh", { method: "POST" });
+      const j = await res.json().catch(() => ({}));
+      if (res.ok) {
+        toast.success("Token refreshed");
+        fetchStatus().catch(() => {});
+      } else {
+        toast.error(j?.error ?? "Refresh failed");
+      }
+    } catch {
+      toast.error("Refresh failed");
+    }
+  };
+
+
   const handlePing = async () => {
     try {
       const res = await fetch("/api/xero/ping", { cache: "no-store" });
@@ -265,6 +281,10 @@ export default function XeroPage() {
             <Button variant="outline" onClick={handlePing}>
               <Signal className="mr-2 h-4 w-4" />
               Test API
+            </Button>
+            <Button variant="outline" onClick={handleRefreshToken} disabled={status !== "connected"}>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Refresh Token
             </Button>
             <Button variant="destructive" onClick={handleDisconnect} disabled={status !== "connected"}>
               <XCircle className="mr-2 h-4 w-4" />
