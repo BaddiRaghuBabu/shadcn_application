@@ -16,6 +16,8 @@ import {
   IconUserOff,
   IconUsers,
   IconLink,
+  IconAddressBook,
+  IconFileInvoice,
 
 } from "@tabler/icons-react"
 import { AudioWaveform, GalleryVerticalEnd } from "lucide-react"
@@ -122,6 +124,21 @@ export const sidebarData: SidebarData = {
               icon: IconBarrierBlock,
             },
           ],
+        },
+      ],
+    },
+     {
+      title: "Xero",
+      items: [
+        {
+          title: "Invoices",
+          url: "/xero/invoices",
+          icon: IconFileInvoice,
+        },
+        {
+          title: "Contacts",
+          url: "/xero/contacts",
+          icon: IconAddressBook,
         },
       ],
     },
