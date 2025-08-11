@@ -132,12 +132,12 @@ export const sidebarData: SidebarData = {
       items: [
         {
           title: "Invoices",
-          url: "/xero/invoices",
+          url: "/invoices",
           icon: IconFileInvoice,
         },
         {
           title: "Contacts",
-          url: "/xero/contacts",
+          url: "/contacts",
           icon: IconAddressBook,
         },
       ],
