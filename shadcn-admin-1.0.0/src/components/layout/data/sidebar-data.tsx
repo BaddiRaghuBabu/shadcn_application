@@ -76,6 +76,11 @@ export const sidebarData: SidebarData = {
           url: "/users",
           icon: IconUsers,
         },
+        {
+          title: "connection-xero",
+          url: "/connection-xero",
+          icon: IconUsers,
+        },
          {
           title: "Admin",
           url: "/admin-users",

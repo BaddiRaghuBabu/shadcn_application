@@ -19,7 +19,6 @@ import {
   ArrowUpDown,
   Columns,
   ExternalLink,
-
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -56,30 +55,35 @@ type InvoiceStatus = "DRAFT" | "SUBMITTED" | "AUTHORISED" | "PAID" | "VOIDED";
 type StatusFilter = "all" | InvoiceStatus;
 type CurrencyFilter = "all" | "INR" | "USD";
 
-type Line = {
-  description: string;
-  quantity: number;
-  unitAmount: number;
-  account?: string;
-  taxRate?: string;
-  lineAmount: number;
+type Invoice = {
+  id: string;                // internal key only (not displayed)
+  number: string;            // invoice_number
+  contact: string;           // contact_name
+  currency: string;          // currency_code
+  date: string;              // issued_at (yyyy-mm-dd)
+  dueDate: string;           // due_at (yyyy-mm-dd)
+  status: InvoiceStatus;     // status
+  amount: number;            // total
+  balance: number;           // amount_due
+  reference?: string | null; // reference
+  updatedAt: string;         // updated_utc
+  link?: string | null;
 };
 
-type Invoice = {
-  id: string;
-  number: string;
-  contact: string;
-  email?: string | null;
-  currency: string;
-  date: string; // ISO (yyyy-mm-dd)
-  dueDate: string; // ISO
-  status: InvoiceStatus;
-  amount: number; // total
-  balance: number; // outstanding
-  reference?: string | null;
-  updatedAt: string; // ISO
-  link?: string | null; // external Xero link (optional)
-  lines?: Line[];
+type XeroInvoiceRow = {
+  invoice_id: string;
+  invoice_number: string | null;
+  contact_name: string | null;
+  status: string | null;
+  currency_code: string | null;
+  amount_due: number | null;
+  amount_paid: number | null;
+  total: number | null;
+  issued_at: string | null;     // timestamptz
+  due_at: string | null;        // timestamptz
+  updated_utc: string | null;   // timestamptz
+  reference: string | null;
+  created_at: string | null;
 };
 
 const STATUS_ORDER: Record<InvoiceStatus, number> = {
@@ -90,7 +94,18 @@ const STATUS_ORDER: Record<InvoiceStatus, number> = {
   VOIDED: 4,
 };
 
+/* ───────────────────── Status Normalizer ───────────────────── */
 
+function normalizeStatus(v: string | null | undefined): InvoiceStatus {
+  const s = String(v ?? "").trim().toUpperCase();
+  if (s === "DRAFT" || s === "SUBMITTED" || s === "AUTHORISED" || s === "PAID" || s === "VOIDED") {
+    return s as InvoiceStatus;
+  }
+  // common variants
+  if (s === "AUTHORIZED") return "AUTHORISED";
+  if (s === "DELETED" || s === "CANCELLED" || s === "CANCELED") return "VOIDED";
+  return "DRAFT";
+}
 
 /* ───────────────────── Page (READ-ONLY) ───────────────────── */
 
@@ -112,7 +127,7 @@ export default function InvoicesReadOnlyPage() {
 
   const [open, setOpen] = useState<Invoice | null>(null);
 
-  // Column visibility (toggle on/off)
+  // Column visibility (toggle on/off) — NO tenant_id / invoice_id columns here.
   const [cols, setCols] = useState<Record<string, boolean>>({
     number: true,
     contact: true,
@@ -127,32 +142,52 @@ export default function InvoicesReadOnlyPage() {
   });
 
   useEffect(() => {
-       const load = async () => {
+    const load = async () => {
+      setLoading(true);
+
+      // Select ONLY display fields (no tenant_id). We still fetch invoice_id to use as a stable React key, but we DO NOT show it.
       const { data, error } = await supabase
         .from("xero_invoices")
-        .select("invoice_id, invoice_number, amount_due, status, created_at");
+        .select(`
+          invoice_id,
+          invoice_number,
+          contact_name,
+          status,
+          currency_code,
+          amount_due,
+          amount_paid,
+          total,
+          issued_at,
+          due_at,
+          updated_utc,
+          reference,
+          created_at
+        `)
+        .order("issued_at", { ascending: false });
+
       if (error) {
         toast.error("Failed to load invoices");
         setInvoices([]);
       } else {
-        const mapped: Invoice[] = data.map((inv) => ({
-          id: inv.invoice_id,
+        const mapped: Invoice[] = (data as XeroInvoiceRow[]).map((inv) => ({
+          id: inv.invoice_id, // internal only
           number: inv.invoice_number ?? "",
-          contact: "",
-          email: null,
-          currency: "",
-          date: "",
-          dueDate: "",
-          status: (inv.status as InvoiceStatus) ?? "DRAFT",
-          amount: Number(inv.amount_due ?? 0),
+          contact: inv.contact_name ?? "",
+          currency: inv.currency_code ?? "",
+          date: toISODate(inv.issued_at),
+          dueDate: toISODate(inv.due_at),
+          status: normalizeStatus(inv.status), // normalized & safe
+          amount: Number(inv.total ?? 0),
           balance: Number(inv.amount_due ?? 0),
-          reference: null,
-          updatedAt: inv.created_at ?? new Date().toISOString(),
+          reference: inv.reference ?? null,
+          updatedAt: inv.updated_utc ?? inv.created_at ?? new Date().toISOString(),
           link: null,
         }));
         setInvoices(mapped);
-      }}
+      }
+
       setLoading(false);
+    };
     load();
   }, []);
 
@@ -163,8 +198,7 @@ export default function InvoicesReadOnlyPage() {
         !q ||
         i.number.toLowerCase().includes(q) ||
         i.contact.toLowerCase().includes(q) ||
-        (i.reference || "").toLowerCase().includes(q) ||
-        (i.email || "").toLowerCase().includes(q);
+        (i.reference || "").toLowerCase().includes(q);
 
       const statusOk = status === "all" ? true : i.status === status;
       const ccyOk = currency === "all" ? true : i.currency === currency;
@@ -200,9 +234,9 @@ export default function InvoicesReadOnlyPage() {
   // KPIs
   const kpi = useMemo(() => {
     const count = filtered.length;
-    const outstanding = filtered.reduce((s, i) => s + i.balance, 0);
+    const outstanding = filtered.reduce((s, i) => s + (i.balance || 0), 0);
     const overdue = filtered.filter(isOverdue);
-    const overdueAmt = overdue.reduce((s, i) => s + i.balance, 0);
+    const overdueAmt = overdue.reduce((s, i) => s + (i.balance || 0), 0);
     return { count, outstanding, overdueCount: overdue.length, overdueAmt };
   }, [filtered]);
 
@@ -243,7 +277,7 @@ export default function InvoicesReadOnlyPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "invoices_read_only.csv";
+    a.download = "invoices.csv";
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -254,8 +288,8 @@ export default function InvoicesReadOnlyPage() {
         {/* Header */}
         <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-4xl font-bold tracking-tight">Invoices (Read-only)</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Search, filter, sort, and export. No edits.</p>
+            <h1 className="text-4xl font-bold tracking-tight">Invoices</h1>
+            <p className="mt-1 text-sm text-muted-foreground">Showing selected fields from Xero → Supabase</p>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={exportCSV}>
@@ -280,7 +314,7 @@ export default function InvoicesReadOnlyPage() {
               <div className="relative sm:col-span-2">
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search by invoice no., contact, email, reference…"
+                  placeholder="Search by invoice no., contact, reference…"
                   className="pl-9"
                   value={query}
                   onChange={(e) => {
@@ -411,7 +445,7 @@ export default function InvoicesReadOnlyPage() {
                     pageData.map((i) => (
                       <TableRow key={i.id} className="hover:bg-muted/30">
                         {cols.number && <TableCell className="font-medium">{i.number}</TableCell>}
-                        {cols.contact && <TableCell>{i.contact}</TableCell>}
+                        {cols.contact && <TableCell>{i.contact || "—"}</TableCell>}
                         {cols.date && <TableCell>{fmtDate(i.date)}</TableCell>}
                         {cols.dueDate && <TableCell className={isOverdue(i) ? "text-red-600" : ""}>{fmtDate(i.dueDate)}</TableCell>}
                         {cols.status && (
@@ -494,47 +528,20 @@ export default function InvoicesReadOnlyPage() {
               {open?.number || "Invoice"}
               {open?.status ? <StatusBadge status={open.status} className="ml-1" /> : null}
             </SheetTitle>
-            <SheetDescription>Read-only invoice details and line items</SheetDescription>
+            <SheetDescription>Read-only invoice details</SheetDescription>
           </SheetHeader>
 
           {open && (
             <div className="mt-5 space-y-5">
               <div className="grid grid-cols-2 gap-4">
-                <Info label="Contact" value={open.contact} />
-                <Info label="Email" value={open.email || "—"} />
+                <Info label="Contact" value={open.contact || "—"} />
                 <Info label="Date" value={fmtDate(open.date)} />
                 <Info label="Due date" value={fmtDate(open.dueDate)} valueClass={isOverdue(open) ? "text-red-600" : ""} />
-                <Info label="Currency" value={open.currency} />
+                <Info label="Currency" value={open.currency || "—"} />
                 <Info label="Reference" value={open.reference || "—"} />
                 <Info label="Amount" value={fmtMoney(open.amount, open.currency)} />
                 <Info label="Outstanding" value={fmtMoney(open.balance, open.currency)} />
                 <Info label="Updated" value={timeAgo(open.updatedAt)} />
-              </div>
-
-              <div>
-                <div className="mb-2 text-sm font-medium">Line items</div>
-                <div className="overflow-x-auto rounded-md border">
-                  <Table className="text-sm">
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Description</TableHead>
-                        <TableHead className="text-right">Qty</TableHead>
-                        <TableHead className="text-right">Unit</TableHead>
-                        <TableHead className="text-right">Line total</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {(open.lines ?? []).map((l, idx) => (
-                        <TableRow key={idx}>
-                          <TableCell>{l.description}</TableCell>
-                          <TableCell className="text-right">{num(l.quantity)}</TableCell>
-                          <TableCell className="text-right">{fmtMoney(l.unitAmount, open.currency)}</TableCell>
-                          <TableCell className="text-right">{fmtMoney(l.lineAmount, open.currency)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
               </div>
 
               <div className="flex items-center justify-end gap-2">
@@ -599,7 +606,15 @@ function Th({
   );
 }
 
-function StatusBadge({ status, className = "" }: { status: InvoiceStatus; className?: string }) {
+function StatusBadge({
+  status,
+  className = "",
+}: {
+  status: InvoiceStatus | string;
+  className?: string;
+}) {
+  const norm = normalizeStatus(status as string);
+
   const map: Record<InvoiceStatus, { label: string; className: string }> = {
     DRAFT: { label: "Draft", className: "bg-gray-100 text-gray-700 border-gray-200" },
     SUBMITTED: { label: "Submitted", className: "bg-blue-50 text-blue-700 border-blue-200" },
@@ -607,7 +622,8 @@ function StatusBadge({ status, className = "" }: { status: InvoiceStatus; classN
     PAID: { label: "Paid", className: "bg-green-50 text-green-700 border-green-200" },
     VOIDED: { label: "Voided", className: "bg-red-50 text-red-700 border-red-200" },
   };
-  const s = map[status];
+  const s = map[norm];
+
   return (
     <Badge variant="secondary" className={`border ${s.className} px-2 ${className}`}>
       {s.label}
@@ -642,42 +658,42 @@ function headerLabel(k: keyof Invoice | string) {
   return map[k] ?? String(k);
 }
 
-
-
-function line(description: string, qty: number, unit: number): Line {
-  return { description, quantity: qty, unitAmount: unit, lineAmount: Math.round(qty * unit * 100) / 100 };
-}
-
-function toISO(offsetDays: number) {
-  const d = new Date();
-  d.setDate(d.getDate() + offsetDays);
-  return d.toISOString().slice(0, 10);
+function toISODate(v: string | null) {
+  if (!v) return "";
+  try {
+    const d = new Date(v);
+    if (isNaN(d.getTime())) return v.slice(0, 10);
+    return d.toISOString().slice(0, 10);
+  } catch {
+    return v.slice(0, 10);
+  }
 }
 
 function fmtDate(iso: string) {
   try {
     const d = new Date(iso);
-    return d.toLocaleDateString();
+    return isNaN(d.getTime()) ? iso : d.toLocaleDateString();
   } catch {
     return iso;
   }
 }
 
 function isOverdue(i: Invoice) {
-  return i.status !== "PAID" && new Date(i.dueDate).getTime() < Date.now() && i.balance > 0;
+  return i.status !== "PAID" && i.dueDate && new Date(i.dueDate).getTime() < Date.now() && (i.balance || 0) > 0;
 }
 
 function fmtMoney(n: number, currency = "INR") {
   try {
     return new Intl.NumberFormat(undefined, { style: "currency", currency, maximumFractionDigits: 2 }).format(n);
   } catch {
-    return `${currency} ${n.toFixed(2)}`;
+    return `${currency} ${Number(n || 0).toFixed(2)}`;
   }
 }
 
 function timeAgo(iso: string) {
-  const d = new Date(iso).getTime();
-  const diff = Date.now() - d;
+  const t = new Date(iso).getTime();
+  if (isNaN(t)) return "—";
+  const diff = Date.now() - t;
   const m = Math.floor(diff / 60000);
   if (m < 1) return "just now";
   if (m < 60) return `${m}m ago`;
@@ -690,8 +706,4 @@ function timeAgo(iso: string) {
 function csvEscape(v: unknown): string {
   const s = String(v ?? "");
   return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
-function num(n: number) {
-  return new Intl.NumberFormat().format(n);
 }
