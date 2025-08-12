@@ -1,7 +1,7 @@
 // app/(dashboard)/contacts/page.tsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useLayoutEffect } from "react";
 import {
   Search,
   Download,
@@ -57,9 +57,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
 
-
 /* ────────────────── Types ────────────────── */
-
 type Contact = {
   id: string;
   name: string;
@@ -91,7 +89,6 @@ type ViewState = {
 };
 
 /* ────────────────── Page (READ ONLY) ────────────────── */
-
 export default function ContactsReadOnlyPage() {
   const [loading, setLoading] = useState(true);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -141,8 +138,8 @@ export default function ContactsReadOnlyPage() {
 
   // Load contacts from Supabase
   useEffect(() => {
-  
-  const load = async () => {
+    const load = async () => {
+      setLoading(true);
       const { data, error } = await supabase
         .from("xero_contacts")
         .select("contact_id, name, email, is_customer, is_supplier");
@@ -167,7 +164,7 @@ export default function ContactsReadOnlyPage() {
         setContacts(mapped);
       }
       setLoading(false);
-      };
+    };
     load();
   }, []);
 
@@ -341,6 +338,60 @@ export default function ContactsReadOnlyPage() {
     setPage(1);
   }
 
+  /* ── Sticky left offset (no fake padding; real-time) ── */
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [stickyOffset, setStickyOffset] = useState(0);
+
+  useLayoutEffect(() => {
+    const getSidebarWidth = () => {
+      // 1) CSS variable (preferred)
+      const varVal = getComputedStyle(document.documentElement).getPropertyValue("--sidebar-width").trim();
+      if (varVal) {
+        const num = parseFloat(varVal);
+        if (!Number.isNaN(num)) return num;
+      }
+      // 2) Try common sidebar elements
+      const el =
+        (document.querySelector("[data-sidebar]") as HTMLElement) ||
+        (document.querySelector("aside[role='navigation']") as HTMLElement) ||
+        (document.querySelector("aside") as HTMLElement) ||
+        (document.querySelector("nav[aria-label='Sidebar']") as HTMLElement);
+      return el ? el.getBoundingClientRect().width : 0;
+    };
+
+    const calc = () => {
+      const scroller = scrollRef.current;
+      if (!scroller) return;
+      const rect = scroller.getBoundingClientRect();
+      const sidebarW = getSidebarWidth();
+      // Only offset if the scroller's left edge is inside the sidebar region.
+      const overlap = rect.left < sidebarW ? sidebarW - Math.max(0, rect.left) : 0;
+      setStickyOffset(Math.max(0, Math.round(overlap)));
+      // Store as CSS var on the scroller so cells can read it.
+      scroller.style.setProperty("--sticky-offset", `${Math.max(0, Math.round(overlap))}px`);
+    };
+
+    calc();
+    const onResize = () => calc();
+    window.addEventListener("resize", onResize);
+
+    const ro = new ResizeObserver(() => calc());
+    if (scrollRef.current) ro.observe(scrollRef.current);
+
+    // also watch possible sidebar
+    const sidebar =
+      (document.querySelector("[data-sidebar]") as HTMLElement) ||
+      (document.querySelector("aside[role='navigation']") as HTMLElement) ||
+      (document.querySelector("aside") as HTMLElement) ||
+      (document.querySelector("nav[aria-label='Sidebar']") as HTMLElement);
+    if (sidebar) ro.observe(sidebar);
+
+    return () => {
+      window.removeEventListener("resize", onResize);
+      ro.disconnect();
+    };
+  }, []);
+
   return (
     <main className="min-h-screen bg-background">
       <div className="mx-auto w-full max-w-[1400px] px-4 md:px-6 lg:px-8">
@@ -357,7 +408,7 @@ export default function ContactsReadOnlyPage() {
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="gap-2">
                   <BookmarkCheck className="h-4 w-4" />
-                  {activeView}
+                  raghy
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
@@ -536,151 +587,206 @@ export default function ContactsReadOnlyPage() {
 
           <CardContent>
             {/* Table */}
-            <div className="overflow-x-auto">
-              <div className="min-w-[1100px]">
-                <Table className={dense ? "text-sm" : ""}>
-                  <TableHeader className="sticky top-0 z-10 bg-background">
-                    <TableRow>
-                      {cols.name && <Th label="Name" active={sortBy === "name"} dir={sortDir} onSort={() => toggleSort("name")} className="w-[260px]" />}
-                      {cols.company && <Th label="Company" active={sortBy === "company"} dir={sortDir} onSort={() => toggleSort("company")} className="w-[220px]" />}
-                      {cols.email && <Th label="Email" className="w-[260px]" />}
-                      {cols.phone && <Th label="Phone" className="w-[180px]" />}
-                      {cols.country && <Th label="Country" active={sortBy === "country"} dir={sortDir} onSort={() => toggleSort("country")} className="w-[160px]" />}
-                      {cols.type && <Th label="Type" className="w-[120px]" />}
-                      {cols.tags && <Th label="Tags" className="w-[220px]" />}
-                      {cols.balance && <Th label="Balance" className="w-[140px] text-right" active={sortBy === "balance"} dir={sortDir} onSort={() => toggleSort("balance")} />}
-                      {cols.updatedAt && <Th label="Updated" active={sortBy === "updatedAt"} dir={sortDir} onSort={() => toggleSort("updatedAt")} className="w-[140px]" />}
-                      <Th label="" className="w-[60px]" />
-                    </TableRow>
-                  </TableHeader>
-
-                  <TableBody>
-                    {loading ? (
-                      Array.from({ length: 3 }).map((_, i) => (
-                        <TableRow key={i}>
-                          <TableCell className="py-6" colSpan={12}>
-                            <div className="h-4 w-full animate-pulse rounded bg-muted" />
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : pageData.length === 0 ? (
+            <div className="relative">
+              <div
+                ref={scrollRef}
+                className="overflow-x-auto rounded-md border"
+                style={{
+                  // keep scrollbars stable; no forced left padding
+                  scrollbarGutter: "stable both-edges",
+                }}
+              >
+                <div className="min-w-[1100px]">
+                  <Table className={dense ? "text-sm" : ""}>
+                    <TableHeader className="sticky top-0 z-20 bg-background">
                       <TableRow>
-                        <TableCell colSpan={12} className="h-28 text-center text-muted-foreground">
-                          No contacts match your filters.
-                        </TableCell>
+                        {cols.name && (
+                          <ThSticky
+                            label="Name"
+                            active={sortBy === "name"}
+                            dir={sortDir}
+                            onSort={() => toggleSort("name")}
+                            className="w-[260px]"
+                          />
+                        )}
+                        {cols.company && (
+                          <Th
+                            label="Company"
+                            active={sortBy === "company"}
+                            dir={sortDir}
+                            onSort={() => toggleSort("company")}
+                            className="w-[220px]"
+                          />
+                        )}
+                        {cols.email && <Th label="Email" className="w-[260px]" />}
+                        {cols.phone && <Th label="Phone" className="w-[180px]" />}
+                        {cols.country && (
+                          <Th
+                            label="Country"
+                            active={sortBy === "country"}
+                            dir={sortDir}
+                            onSort={() => toggleSort("country")}
+                            className="w-[160px]"
+                          />
+                        )}
+                        {cols.type && <Th label="Type" className="w-[120px]" />}
+                        {cols.tags && <Th label="Tags" className="w-[220px]" />}
+                        {cols.balance && (
+                          <Th
+                            label="Balance"
+                            className="w-[140px] text-right"
+                            active={sortBy === "balance"}
+                            dir={sortDir}
+                            onSort={() => toggleSort("balance")}
+                          />
+                        )}
+                        {cols.updatedAt && (
+                          <Th
+                            label="Updated"
+                            active={sortBy === "updatedAt"}
+                            dir={sortDir}
+                            onSort={() => toggleSort("updatedAt")}
+                            className="w-[140px]"
+                          />
+                        )}
+                        <Th label="" className="w-[60px]" />
                       </TableRow>
-                    ) : (
-                      pageData.map((c) => (
-                        <TableRow key={c.id} className="hover:bg-muted/30">
-                          {cols.name && (
-                            <TableCell className="whitespace-nowrap">
-                              <div className="flex items-center gap-3">
-                                <Avatar className="h-9 w-9">
-                                  <AvatarFallback>{initials(c.name)}</AvatarFallback>
-                                </Avatar>
-                                <div>
-                                  <div className="max-w-[200px] truncate font-medium">{c.name}</div>
-                                  {c.company ? (
-                                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                      <Building2 className="h-3.5 w-3.5" />
-                                      <span className="max-w-[200px] truncate">{c.company}</span>
-                                    </div>
-                                  ) : null}
-                                </div>
-                              </div>
+                    </TableHeader>
+
+                    <TableBody>
+                      {loading ? (
+                        Array.from({ length: 3 }).map((_, i) => (
+                          <TableRow key={i}>
+                            <TableCell className="py-6" colSpan={12}>
+                              <div className="h-4 w-full animate-pulse rounded bg-muted" />
                             </TableCell>
-                          )}
-
-                          {cols.company && (
-                            <TableCell className="max-w-[200px] truncate">{c.company || "—"}</TableCell>
-                          )}
-
-                          {cols.email && (
-                            <TableCell className="whitespace-nowrap">
-                              <div className="flex items-center gap-2">
-                                {c.email ? (
-                                  <>
-                                    <Mail className="h-4 w-4 text-muted-foreground" />
-                                    <button className="max-w-[190px] truncate hover:underline" onClick={() => (window.location.href = `mailto:${c.email}`)}>
-                                      {c.email}
-                                    </button>
-                                    <IconButton title="Copy email" onClick={() => copyToClipboard(c.email!)}>
-                                      <Copy className="h-3.5 w-3.5" />
-                                    </IconButton>
-                                  </>
-                                ) : (
-                                  <span className="text-muted-foreground">—</span>
-                                )}
-                              </div>
-                            </TableCell>
-                          )}
-
-                          {cols.phone && (
-                            <TableCell className="whitespace-nowrap">
-                              <div className="flex items-center gap-2">
-                                {c.phone ? (
-                                  <>
-                                    <Phone className="h-4 w-4 text-muted-foreground" />
-                                    <a className="max-w-[120px] truncate hover:underline" href={`tel:${c.phone.replace(/\s/g, "")}`}>
-                                      {c.phone}
-                                    </a>
-                                    <IconButton title="Copy phone" onClick={() => copyToClipboard(c.phone!)}>
-                                      <Copy className="h-3.5 w-3.5" />
-                                    </IconButton>
-                                  </>
-                                ) : (
-                                  <span className="text-muted-foreground">—</span>
-                                )}
-                              </div>
-                            </TableCell>
-                          )}
-
-                          {cols.country && <TableCell className="whitespace-nowrap">{c.country || "—"}</TableCell>}
-
-                          {cols.type && (
-                            <TableCell>
-                              <TypeBadge contact={c} />
-                            </TableCell>
-                          )}
-
-                          {cols.tags && (
-                            <TableCell>
-                              <div className="flex max-w-[200px] flex-wrap gap-1">
-                                {c.tags.length ? (
-                                  c.tags.map((t) => (
-                                    <Badge key={t} variant="secondary" className="px-2 py-0.5">
-                                      {t}
-                                    </Badge>
-                                  ))
-                                ) : (
-                                  <span className="text-muted-foreground">—</span>
-                                )}
-                              </div>
-                            </TableCell>
-                          )}
-
-                          {cols.balance && (
-                            <TableCell className={`text-right ${c.balance > 0 ? "font-medium" : ""}`}>
-                              {fmtMoney(c.balance)}
-                            </TableCell>
-                          )}
-
-                          {cols.updatedAt && (
-                            <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                              {timeAgo(c.updatedAt)}
-                            </TableCell>
-                          )}
-
-                          <TableCell className="w-0 text-right">
-                            <Button size="icon" variant="ghost" onClick={() => setOpenContact(c)}>
-                              <Eye className="h-4 w-4" />
-                            </Button>
+                          </TableRow>
+                        ))
+                      ) : pageData.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={12} className="h-28 text-center text-muted-foreground">
+                            No contacts match your filters.
                           </TableCell>
                         </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
+                      ) : (
+                        pageData.map((c) => (
+                          <TableRow key={c.id} className="hover:bg-muted/30">
+                            {cols.name && (
+                              <TdSticky className="w-[260px]">
+                                <div className="flex items-center gap-3">
+                                  <Avatar className="h-9 w-9">
+                                    <AvatarFallback>{initials(c.name)}</AvatarFallback>
+                                  </Avatar>
+                                  <div>
+                                    <div className="max-w-[200px] truncate font-medium">{c.name}</div>
+                                    {c.company ? (
+                                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                        <Building2 className="h-3.5 w-3.5" />
+                                        <span className="max-w-[200px] truncate">{c.company}</span>
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              </TdSticky>
+                            )}
+
+                            {cols.company && (
+                              <TableCell className="max-w-[200px] truncate">{c.company || "—"}</TableCell>
+                            )}
+
+                            {cols.email && (
+                              <TableCell className="whitespace-nowrap">
+                                <div className="flex items-center gap-2">
+                                  {c.email ? (
+                                    <>
+                                      <Mail className="h-4 w-4 text-muted-foreground" />
+                                      <button
+                                        className="max-w-[190px] truncate hover:underline"
+                                        onClick={() => (window.location.href = `mailto:${c.email}`)}
+                                      >
+                                        {c.email}
+                                      </button>
+                                      <IconButton title="Copy email" onClick={() => copyToClipboard(c.email!)}>
+                                        <Copy className="h-3.5 w-3.5" />
+                                      </IconButton>
+                                    </>
+                                  ) : (
+                                    <span className="text-muted-foreground">—</span>
+                                  )}
+                                </div>
+                              </TableCell>
+                            )}
+
+                            {cols.phone && (
+                              <TableCell className="whitespace-nowrap">
+                                <div className="flex items-center gap-2">
+                                  {c.phone ? (
+                                    <>
+                                      <Phone className="h-4 w-4 text-muted-foreground" />
+                                      <a
+                                        className="max-w-[120px] truncate hover:underline"
+                                        href={`tel:${c.phone.replace(/\s/g, "")}`}
+                                      >
+                                        {c.phone}
+                                      </a>
+                                      <IconButton title="Copy phone" onClick={() => copyToClipboard(c.phone!)}>
+                                        <Copy className="h-3.5 w-3.5" />
+                                      </IconButton>
+                                    </>
+                                  ) : (
+                                    <span className="text-muted-foreground">—</span>
+                                  )}
+                                </div>
+                              </TableCell>
+                            )}
+
+                            {cols.country && <TableCell className="whitespace-nowrap">{c.country || "—"}</TableCell>}
+
+                            {cols.type && (
+                              <TableCell>
+                                <TypeBadge contact={c} />
+                              </TableCell>
+                            )}
+
+                            {cols.tags && (
+                              <TableCell>
+                                <div className="flex max-w-[200px] flex-wrap gap-1">
+                                  {c.tags.length ? (
+                                    c.tags.map((t) => (
+                                      <Badge key={t} variant="secondary" className="px-2 py-0.5">
+                                        {t}
+                                      </Badge>
+                                    ))
+                                  ) : (
+                                    <span className="text-muted-foreground">—</span>
+                                  )}
+                                </div>
+                              </TableCell>
+                            )}
+
+                            {cols.balance && (
+                              <TableCell className={`text-right ${c.balance > 0 ? "font-medium" : ""}`}>
+                                {fmtMoney(c.balance)}
+                              </TableCell>
+                            )}
+
+                            {cols.updatedAt && (
+                              <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                                {timeAgo(c.updatedAt)}
+                              </TableCell>
+                            )}
+
+                            <TableCell className="w-0 text-right">
+                              <Button size="icon" variant="ghost" onClick={() => setOpenContact(c)}>
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
             </div>
 
@@ -815,6 +921,57 @@ function Th({
   );
 }
 
+function ThSticky({
+  label,
+  onSort,
+  active,
+  dir,
+  className,
+}: {
+  label: string;
+  onSort?: () => void;
+  active?: boolean;
+  dir?: "asc" | "desc";
+  className?: string;
+}) {
+  return (
+    <TableHead
+      onClick={onSort}
+      style={{ left: "var(--sticky-offset, 0px)" }}
+      className={[
+        "sticky z-30 bg-background relative",
+        // add a hairline on the right edge
+        "after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-border",
+        "select-none",
+        onSort ? "cursor-pointer" : "",
+        className ?? "",
+      ].join(" ")}
+      aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}
+    >
+      <div className="flex items-center gap-1">
+        <span>{label}</span>
+        {onSort ? <ArrowUpDown className={`h-3.5 w-3.5 ${active ? "" : "text-muted-foreground"}`} /> : null}
+      </div>
+    </TableHead>
+  );
+}
+
+function TdSticky({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return (
+    <TableCell
+      style={{ left: "var(--sticky-offset, 0px)" }}
+      className={[
+        "sticky z-20 bg-background relative",
+        "after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-border",
+        "whitespace-nowrap",
+        className,
+      ].join(" ")}
+    >
+      {children}
+    </TableCell>
+  );
+}
+
 function ToggleLine({
   label,
   checked,
@@ -872,8 +1029,6 @@ function TypeBadge({ contact }: { contact: Contact }) {
     </Badge>
   );
 }
-
-
 
 function typeLabel(t: TypeFilter) {
   switch (t) {

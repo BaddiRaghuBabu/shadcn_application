@@ -15,3 +15,4 @@ create table if not exists xero_invoices (
   reference text,
   created_at timestamptz not null default now()
 );
+
