@@ -8,3 +8,4 @@ create table if not exists xero_invoices (
   status text,
   created_at timestamptz not null default now()
 );
+

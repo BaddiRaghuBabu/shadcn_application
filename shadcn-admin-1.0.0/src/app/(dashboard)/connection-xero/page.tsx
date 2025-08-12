@@ -75,6 +75,9 @@ export default function XeroPage() {
   const [scopes, setScopes] = useState<string[]>(RECOMMENDED_SCOPES);
   const [scopesOpen, setScopesOpen] = useState(false);
 
+  // NEW: Track when we consider the UI "connected" based on tenantName presence
+  const [connectedAt, setConnectedAt] = useState<string | null>(null);
+
   // optional: implement this if you have /api/xero/status
   const fetchStatus = async () => {
     try {
@@ -111,6 +114,23 @@ export default function XeroPage() {
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, [sp]);
+
+  // NEW: derive UI status from presence of tenantName (your requested logic)
+  const uiStatus: ConnStatus = useMemo(() => {
+    if (status === "loading") return "loading";
+    return data?.tenantName ? "connected" : "disconnected";
+  }, [status, data?.tenantName]);
+
+  // NEW: remember when we first saw a tenantName (i.e., "connected time")
+  useEffect(() => {
+    if (data?.tenantName) {
+      if (!connectedAt) setConnectedAt(new Date().toISOString());
+    } else {
+      // reset if disconnected
+      setConnectedAt(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.tenantName]);
 
   const handleConnect = () => {
     const u = new URL(window.location.origin + "/api/xero/connect");
@@ -151,8 +171,7 @@ export default function XeroPage() {
     }
   };
 
-
-   const handleSync = async (resource: "contacts" | "invoices") => {
+  const handleSync = async (resource: "contacts" | "invoices") => {
     try {
       const res = await fetch(`/api/xero/${resource}`, { cache: "no-store" });
       if (!res.ok) throw new Error("Sync failed");
@@ -162,8 +181,6 @@ export default function XeroPage() {
       toast.error(`Failed to sync ${resource}`);
     }
   };
-
-
 
   const handlePing = async () => {
     try {
@@ -178,6 +195,7 @@ export default function XeroPage() {
 
   const lastSync = useMemo(() => formatWhen(data?.lastSyncAt), [data?.lastSyncAt]);
   const tokenExp = useMemo(() => formatWhen(data?.tokenExpiresAt), [data?.tokenExpiresAt]);
+  const connectedAgo = useMemo(() => formatWhen(connectedAt), [connectedAt]);
 
   return (
     <main className="min-h-screen bg-background">
@@ -200,13 +218,13 @@ export default function XeroPage() {
             variant="secondary"
             className="h-12 rounded-xl border bg-muted px-5 text-base font-medium"
             onClick={handleConnect}
-            disabled={status === "loading"}
+            disabled={uiStatus === "loading"}
           >
             <Link2 className="mr-2 h-5 w-5" />
-            {status === "connected" ? "Reconnect to Xero" : "Connect to Xero"}
+            {uiStatus === "connected" ? "Reconnect to Xero" : "Connect to Xero"}
           </Button>
 
-      <DropdownMenu>
+          <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 type="button"
@@ -225,7 +243,6 @@ export default function XeroPage() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-
 
           <TooltipProvider>
             <Tooltip>
@@ -249,9 +266,9 @@ export default function XeroPage() {
         <Card className="mt-8">
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <div className="flex items-center gap-3">
-              {status === "connected" ? (
+              {uiStatus === "connected" ? (
                 <CheckCircle2 className="h-6 w-6 text-green-600" />
-              ) : status === "loading" ? (
+              ) : uiStatus === "loading" ? (
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               ) : (
                 <XCircle className="h-6 w-6 text-red-600" />
@@ -260,15 +277,18 @@ export default function XeroPage() {
               <Badge
                 variant="secondary"
                 className={
-                  status === "connected"
+                  uiStatus === "connected"
                     ? "border-green-200 bg-green-50 text-green-700"
-                    : status === "loading"
+                    : uiStatus === "loading"
                     ? "text-muted-foreground"
                     : "border-red-200 bg-red-50 text-red-700"
                 }
               >
-                {status === "connected" ? "Connected" : status === "loading" ? "Checking…" : "Not connected"}
+                {uiStatus === "connected" ? "Connected" : uiStatus === "loading" ? "Checking…" : "Not connected"}
               </Badge>
+              {uiStatus === "connected" && (
+                <span className="ml-2 text-xs text-muted-foreground">• {connectedAgo}</span>
+              )}
             </div>
 
             <div className="flex items-center gap-3">
@@ -298,6 +318,14 @@ export default function XeroPage() {
               value={data?.tenantName ? data.tenantName : "—"}
               icon={<PlugZap className="h-4 w-4" />}
             />
+
+            {/* NEW: Show connection time based on tenantName logic */}
+            <InfoRow
+              label="Connected since"
+              value={uiStatus === "connected" ? connectedAgo : "—"}
+              icon={<CheckCircle2 className="h-4 w-4 text-green-600" />}
+            />
+
             <InfoRow
               label="Environment"
               value={data?.environment ? String(data.environment).toUpperCase() : env.toUpperCase()}
@@ -313,11 +341,11 @@ export default function XeroPage() {
               <Signal className="mr-2 h-4 w-4" />
               Test API
             </Button>
-            <Button variant="outline" onClick={handleRefreshToken} disabled={status !== "connected"}>
+            <Button variant="outline" onClick={handleRefreshToken} disabled={uiStatus !== "connected"}>
               <RefreshCw className="mr-2 h-4 w-4" />
               Refresh Token
             </Button>
-            <Button variant="destructive" onClick={handleDisconnect} disabled={status !== "connected"}>
+            <Button variant="destructive" onClick={handleDisconnect} disabled={uiStatus !== "connected"}>
               <XCircle className="mr-2 h-4 w-4" />
               Disconnect
             </Button>
@@ -329,9 +357,9 @@ export default function XeroPage() {
       <div className="fixed inset-x-0 bottom-0 border-t bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-3">
           <div className="flex items-center gap-3">
-            {status === "connected" ? (
+            {uiStatus === "connected" ? (
               <CheckCircle2 className="h-5 w-5 text-green-600" />
-            ) : status === "loading" ? (
+            ) : uiStatus === "loading" ? (
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             ) : (
               <XCircle className="h-5 w-5 text-red-600" />
@@ -340,22 +368,25 @@ export default function XeroPage() {
             <Badge
               variant="secondary"
               className={
-                status === "connected"
+                uiStatus === "connected"
                   ? "border-green-200 bg-green-50 text-green-700"
-                  : status === "loading"
+                  : uiStatus === "loading"
                   ? "text-muted-foreground"
                   : "border-red-200 bg-red-50 text-red-700"
               }
             >
-              {status === "connected" ? "Connected" : status === "loading" ? "Checking…" : "Not connected"}
+              {uiStatus === "connected" ? "Connected" : uiStatus === "loading" ? "Checking…" : "Not connected"}
             </Badge>
+            {uiStatus === "connected" && (
+              <span className="ml-2 text-xs text-muted-foreground">• {connectedAgo}</span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Button size="sm" variant="ghost" onClick={fetchStatus} className="rounded-lg">
               Refresh
             </Button>
             <Button size="sm" onClick={handleConnect} className="rounded-lg">
-              {status === "connected" ? "Reconnect" : "Connect"}
+              {uiStatus === "connected" ? "Reconnect" : "Connect"}
             </Button>
           </div>
         </div>
