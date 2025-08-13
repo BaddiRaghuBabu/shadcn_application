@@ -1,7 +1,13 @@
-// app/(dashboard)/contacts/page.tsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useLayoutEffect } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useLayoutEffect,
+  type ReactNode,
+} from "react";
 import {
   Search,
   Download,
@@ -20,6 +26,7 @@ import {
   Columns,
   ArrowUpDown,
   BookmarkCheck,
+  Trash2,
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -53,7 +60,13 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -73,7 +86,27 @@ type Contact = {
   balance: number;
 };
 
-type TypeFilter = "all" | "customer" | "supplier" | "both" | "other" | "archived";
+type TypeFilter =
+  | "all"
+  | "customer"
+  | "supplier"
+  | "both"
+  | "other"
+  | "archived";
+
+type SortKey = "name" | "company" | "country" | "updatedAt" | "balance";
+
+type ColumnsState = {
+  name: boolean;
+  company: boolean;
+  email: boolean;
+  phone: boolean;
+  country: boolean;
+  type: boolean;
+  tags: boolean;
+  balance: boolean;
+  updatedAt: boolean;
+};
 
 type ViewState = {
   type: TypeFilter;
@@ -82,10 +115,30 @@ type ViewState = {
   hasEmail: boolean;
   hasPhone: boolean;
   hasBalance: boolean;
-  cols: Record<string, boolean>;
-  sortBy: "name" | "company" | "country" | "updatedAt" | "balance";
+  cols: ColumnsState;
+  sortBy: SortKey;
   sortDir: "asc" | "desc";
   pageSize: number;
+};
+
+type ContactRow = {
+  contact_id: string;
+  name: string | null;
+  email: string | null;
+  is_customer: boolean | null;
+  is_supplier: boolean | null;
+};
+
+const defaultCols: ColumnsState = {
+  name: true,
+  company: true,
+  email: true,
+  phone: true,
+  country: true,
+  type: true,
+  tags: true,
+  balance: true,
+  updatedAt: true,
 };
 
 /* ────────────────── Page (READ ONLY) ────────────────── */
@@ -102,27 +155,19 @@ export default function ContactsReadOnlyPage() {
   const [dense, setDense] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [sortBy, setSortBy] = useState<"name" | "company" | "country" | "updatedAt" | "balance">("name");
+  const [sortBy, setSortBy] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [openContact, setOpenContact] = useState<Contact | null>(null);
-  const [cols, setCols] = useState<Record<string, boolean>>({
-    name: true,
-    company: true,
-    email: true,
-    phone: true,
-    country: true,
-    type: true,
-    tags: true,
-    balance: true,
-    updatedAt: true,
-  });
+  const [cols, setCols] = useState<ColumnsState>(defaultCols);
 
   // Saved views
-  const [views, setViews] = useState<string[]>(() => {
-    if (typeof window === "undefined") return [];
-    const j = localStorage.getItem("xero_contact_views");
-    return j ? (JSON.parse(j) as string[]) : [];
-  });
+  const [views, setViews] = useState<string[]>(
+    (() => {
+      if (typeof window === "undefined") return [];
+      const j = localStorage.getItem("xero_contact_views");
+      return j ? (JSON.parse(j) as string[]) : [];
+    })(),
+  );
   const [activeView, setActiveView] = useState<string>("Default");
 
   // Debounced search
@@ -143,11 +188,13 @@ export default function ContactsReadOnlyPage() {
       const { data, error } = await supabase
         .from("xero_contacts")
         .select("contact_id, name, email, is_customer, is_supplier");
+
       if (error) {
         toast.error("Failed to load contacts");
         setContacts([]);
       } else {
-        const mapped: Contact[] = data.map((c) => ({
+        const rows: ContactRow[] = (data ?? []) as unknown as ContactRow[];
+        const mapped: Contact[] = rows.map((c) => ({
           id: c.contact_id,
           name: c.name ?? "",
           company: null,
@@ -155,8 +202,8 @@ export default function ContactsReadOnlyPage() {
           phone: null,
           country: null,
           tags: [],
-          isCustomer: c.is_customer ?? false,
-          isSupplier: c.is_supplier ?? false,
+          isCustomer: Boolean(c.is_customer),
+          isSupplier: Boolean(c.is_supplier),
           isArchived: false,
           updatedAt: new Date().toISOString(),
           balance: 0,
@@ -170,7 +217,10 @@ export default function ContactsReadOnlyPage() {
 
   // Derived lists
   const countries = useMemo(
-    () => Array.from(new Set(contacts.map((c) => c.country).filter(Boolean))) as string[],
+    () =>
+      Array.from(
+        new Set(contacts.map((c) => c.country).filter(Boolean)),
+      ) as string[],
     [contacts],
   );
   const allTags = useMemo(
@@ -202,25 +252,48 @@ export default function ContactsReadOnlyPage() {
         (c.phone || "").toLowerCase().includes(q);
 
       const matchesCountry = country === "all" ? true : (c.country || "") === country;
-      const matchesTags = selectedTags.length === 0 || selectedTags.every((t) => c.tags.includes(t));
+      const matchesTags =
+        selectedTags.length === 0 ||
+        selectedTags.every((t) => c.tags.includes(t));
       const emailOk = hasEmail ? !!c.email : true;
       const phoneOk = hasPhone ? !!c.phone : true;
       const balanceOk = hasBalance ? c.balance > 0 : true;
 
-      return matchesType && matchesQ && matchesCountry && matchesTags && emailOk && phoneOk && balanceOk;
+      return (
+        matchesType &&
+        matchesQ &&
+        matchesCountry &&
+        matchesTags &&
+        emailOk &&
+        phoneOk &&
+        balanceOk
+      );
     });
 
     list = list.sort((a, b) => {
-      const A = a[sortBy] || "";
-      const B = b[sortBy] || "";
-      let cmp = 0;
-      if (sortBy === "balance") cmp = (a.balance ?? 0) - (b.balance ?? 0);
-      else cmp = String(A).localeCompare(String(B));
+      if (sortBy === "balance") {
+        const cmp = (a.balance ?? 0) - (b.balance ?? 0);
+        return sortDir === "asc" ? cmp : -cmp;
+      }
+      const A = (a[sortBy] ?? "") as string;
+      const B = (b[sortBy] ?? "") as string;
+      const cmp = String(A).localeCompare(String(B));
       return sortDir === "asc" ? cmp : -cmp;
     });
 
     return list;
-  }, [contacts, query, type, country, selectedTags, hasEmail, hasPhone, hasBalance, sortBy, sortDir]);
+  }, [
+    contacts,
+    query,
+    type,
+    country,
+    selectedTags,
+    hasEmail,
+    hasPhone,
+    hasBalance,
+    sortBy,
+    sortDir,
+  ]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const pageData = filtered.slice((page - 1) * pageSize, page * pageSize);
@@ -230,11 +303,13 @@ export default function ContactsReadOnlyPage() {
     const count = filtered.length;
     const withEmail = filtered.filter((c) => !!c.email).length;
     const withPhone = filtered.filter((c) => !!c.phone).length;
-    const owingAmt = filtered.filter((c) => c.balance > 0).reduce((s, c) => s + c.balance, 0);
+    const owingAmt = filtered
+      .filter((c) => c.balance > 0)
+      .reduce((s, c) => s + c.balance, 0);
     return { count, withEmail, withPhone, owingAmt };
   }, [filtered]);
 
-  function toggleSort(col: typeof sortBy) {
+  function toggleSort(col: SortKey) {
     if (sortBy === col) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else {
       setSortBy(col);
@@ -243,11 +318,30 @@ export default function ContactsReadOnlyPage() {
   }
 
   function exportCSV() {
-    const headers = Object.entries(cols)
+    type ExportMap = {
+      name: string;
+      company: string;
+      email: string;
+      phone: string;
+      country: string;
+      type: string;
+      tags: string;
+      balance: number;
+      updatedAt: string;
+    };
+    type ColumnKey = keyof ColumnsState;
+    type ExportKey = keyof ExportMap;
+
+    const columnOrder = (
+      Object.entries(cols) as [ColumnKey, boolean][]
+    )
       .filter(([, v]) => v)
-      .map(([k]) => headerLabel(k as keyof Contact));
-    const rows = filtered.map((c) => {
-      const map: Record<string, string | number> = {
+      .map(([k]) => k) as ExportKey[];
+
+    const headers = columnOrder.map((k) => headerLabel(k));
+
+    const rows = filtered.map<(string | number)[]>((c) => {
+      const map: ExportMap = {
         name: c.name,
         company: c.company ?? "",
         email: c.email ?? "",
@@ -258,11 +352,12 @@ export default function ContactsReadOnlyPage() {
         balance: c.balance,
         updatedAt: c.updatedAt,
       };
-      return Object.entries(cols)
-        .filter(([, v]) => v)
-        .map(([k]) => map[k]);
+      return columnOrder.map((k) => map[k]);
     });
-    const csv = [headers, ...rows].map((r) => r.map(csvEscape).join(",")).join("\n");
+
+    const csv = [headers, ...rows]
+      .map((r) => r.map(csvEscape).join(","))
+      .join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -295,6 +390,18 @@ export default function ContactsReadOnlyPage() {
     toast.success(`Saved view: ${name}`);
   }
 
+  function deleteView(name: string) {
+    localStorage.removeItem(`xero_contact_view_${name}`);
+    const next = views.filter((v) => v !== name);
+    setViews(next);
+    localStorage.setItem("xero_contact_views", JSON.stringify(next));
+    if (name === activeView) {
+      applyView("Default");
+      setActiveView("Default");
+    }
+    toast.success(`Deleted view: ${name}`);
+  }
+
   function applyView(name: string) {
     if (name === "Default") {
       setType("all");
@@ -303,17 +410,7 @@ export default function ContactsReadOnlyPage() {
       setHasEmail(false);
       setHasPhone(false);
       setHasBalance(false);
-      setCols({
-        name: true,
-        company: true,
-        email: true,
-        phone: true,
-        country: true,
-        type: true,
-        tags: true,
-        balance: true,
-        updatedAt: true,
-      });
+      setCols(defaultCols);
       setSortBy("name");
       setSortDir("asc");
       setPageSize(10);
@@ -330,7 +427,7 @@ export default function ContactsReadOnlyPage() {
     setHasEmail(s.hasEmail);
     setHasPhone(s.hasPhone);
     setHasBalance(s.hasBalance);
-    setCols(s.cols);
+    setCols({ ...defaultCols, ...(s.cols as Partial<ColumnsState>) });
     setSortBy(s.sortBy);
     setSortDir(s.sortDir);
     setPageSize(s.pageSize);
@@ -340,22 +437,26 @@ export default function ContactsReadOnlyPage() {
 
   /* ── Sticky left offset (no fake padding; real-time) ── */
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const [stickyOffset, setStickyOffset] = useState(0);
+  const [_stickyOffset, setStickyOffset] = useState(0);
 
   useLayoutEffect(() => {
     const getSidebarWidth = () => {
-      // 1) CSS variable (preferred)
-      const varVal = getComputedStyle(document.documentElement).getPropertyValue("--sidebar-width").trim();
+      const varVal = getComputedStyle(
+        document.documentElement,
+      ).getPropertyValue("--sidebar-width").trim();
       if (varVal) {
         const num = parseFloat(varVal);
         if (!Number.isNaN(num)) return num;
       }
-      // 2) Try common sidebar elements
       const el =
         (document.querySelector("[data-sidebar]") as HTMLElement) ||
-        (document.querySelector("aside[role='navigation']") as HTMLElement) ||
+        (document.querySelector(
+          "aside[role='navigation']",
+        ) as HTMLElement) ||
         (document.querySelector("aside") as HTMLElement) ||
-        (document.querySelector("nav[aria-label='Sidebar']") as HTMLElement);
+        (document.querySelector(
+          "nav[aria-label='Sidebar']",
+        ) as HTMLElement);
       return el ? el.getBoundingClientRect().width : 0;
     };
 
@@ -364,11 +465,11 @@ export default function ContactsReadOnlyPage() {
       if (!scroller) return;
       const rect = scroller.getBoundingClientRect();
       const sidebarW = getSidebarWidth();
-      // Only offset if the scroller's left edge is inside the sidebar region.
-      const overlap = rect.left < sidebarW ? sidebarW - Math.max(0, rect.left) : 0;
-      setStickyOffset(Math.max(0, Math.round(overlap)));
-      // Store as CSS var on the scroller so cells can read it.
-      scroller.style.setProperty("--sticky-offset", `${Math.max(0, Math.round(overlap))}px`);
+      const overlap =
+        rect.left < sidebarW ? sidebarW - Math.max(0, rect.left) : 0;
+      const v = Math.max(0, Math.round(overlap));
+      setStickyOffset(v);
+      scroller.style.setProperty("--sticky-offset", `${v}px`);
     };
 
     calc();
@@ -378,12 +479,15 @@ export default function ContactsReadOnlyPage() {
     const ro = new ResizeObserver(() => calc());
     if (scrollRef.current) ro.observe(scrollRef.current);
 
-    // also watch possible sidebar
     const sidebar =
       (document.querySelector("[data-sidebar]") as HTMLElement) ||
-      (document.querySelector("aside[role='navigation']") as HTMLElement) ||
+      (document.querySelector(
+        "aside[role='navigation']",
+      ) as HTMLElement) ||
       (document.querySelector("aside") as HTMLElement) ||
-      (document.querySelector("nav[aria-label='Sidebar']") as HTMLElement);
+      (document.querySelector(
+        "nav[aria-label='Sidebar']",
+      ) as HTMLElement);
     if (sidebar) ro.observe(sidebar);
 
     return () => {
@@ -398,7 +502,9 @@ export default function ContactsReadOnlyPage() {
         {/* Header */}
         <header className="mb-6 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="text-4xl font-bold tracking-tight">Contacts (Read-only)</h1>
+            <h1 className="text-4xl font-bold tracking-tight">
+              Contacts (Read-only)
+            </h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Search, filter, sort, export, quick views, and quick look drawer.
             </p>
@@ -408,20 +514,41 @@ export default function ContactsReadOnlyPage() {
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="gap-2">
                   <BookmarkCheck className="h-4 w-4" />
-                  raghy
+                  {activeView}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>Views</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => applyView("Default")}>Default</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => applyView("Default")}>
+                  Default
+                </DropdownMenuItem>
+
                 {views.map((v) => (
-                  <DropdownMenuItem key={v} onClick={() => applyView(v)}>
-                    {v}
+                  <DropdownMenuItem
+                    key={v}
+                    className="pl-2 pr-1"
+                    onClick={() => applyView(v)}
+                  >
+                    <span className="flex-1 truncate">{v}</span>
+                    <button
+                      className="ml-2 rounded p-1 hover:bg-muted"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteView(v);
+                      }}
+                      title={`Delete "${v}"`}
+                      type="button"
+                    >
+                      <Trash2 className="h-4 w-4 text-muted-foreground" />
+                    </button>
                   </DropdownMenuItem>
                 ))}
+
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={saveCurrentView}>Save current as new…</DropdownMenuItem>
+                <DropdownMenuItem onClick={saveCurrentView}>
+                  Save current as new…
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
             <Button variant="outline" onClick={exportCSV}>
@@ -465,7 +592,16 @@ export default function ContactsReadOnlyPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start">
-                  {(["all", "customer", "supplier", "both", "other", "archived"] as TypeFilter[]).map((t) => (
+                  {(
+                    [
+                      "all",
+                      "customer",
+                      "supplier",
+                      "both",
+                      "other",
+                      "archived",
+                    ] as TypeFilter[]
+                  ).map((t) => (
                     <DropdownMenuItem
                       key={t}
                       onClick={() => {
@@ -487,11 +623,27 @@ export default function ContactsReadOnlyPage() {
                     Country: {country === "all" ? "All" : country}
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="max-h-72 overflow-auto">
-                  <DropdownMenuItem onClick={() => { setPage(1); setCountry("all"); }}>All</DropdownMenuItem>
+                <DropdownMenuContent
+                  align="start"
+                  className="max-h-72 overflow-auto"
+                >
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setPage(1);
+                      setCountry("all");
+                    }}
+                  >
+                    All
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   {countries.map((c) => (
-                    <DropdownMenuItem key={c} onClick={() => { setPage(1); setCountry(c); }}>
+                    <DropdownMenuItem
+                      key={c}
+                      onClick={() => {
+                        setPage(1);
+                        setCountry(c);
+                      }}
+                    >
                       {c}
                     </DropdownMenuItem>
                   ))}
@@ -503,7 +655,9 @@ export default function ContactsReadOnlyPage() {
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="justify-start">
                     <TagIcon className="mr-2 h-4 w-4" />
-                    {selectedTags.length ? `${selectedTags.length} Tag(s)` : "Tags"}
+                    {selectedTags.length
+                      ? `${selectedTags.length} Tag(s)`
+                      : "Tags"}
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-56">
@@ -514,7 +668,9 @@ export default function ContactsReadOnlyPage() {
                       key={t}
                       checked={selectedTags.includes(t)}
                       onCheckedChange={(v) =>
-                        setSelectedTags((prev) => (v ? [...prev, t] : prev.filter((x) => x !== t)))
+                        setSelectedTags((prev) =>
+                          v ? [...prev, t] : prev.filter((x) => x !== t),
+                        )
                       }
                     >
                       {t}
@@ -529,9 +685,30 @@ export default function ContactsReadOnlyPage() {
             {/* Quick toggles + rows/columns */}
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
               <div className="grid w-full gap-3 md:w-auto md:grid-cols-3">
-                <ToggleLine label="Has email" checked={hasEmail} onChange={(v) => { setPage(1); setHasEmail(v); }} />
-                <ToggleLine label="Has phone" checked={hasPhone} onChange={(v) => { setPage(1); setHasPhone(v); }} />
-                <ToggleLine label="Has outstanding balance" checked={hasBalance} onChange={(v) => { setPage(1); setHasBalance(v); }} />
+                <ToggleLine
+                  label="Has email"
+                  checked={hasEmail}
+                  onChange={(v) => {
+                    setPage(1);
+                    setHasEmail(v);
+                  }}
+                />
+                <ToggleLine
+                  label="Has phone"
+                  checked={hasPhone}
+                  onChange={(v) => {
+                    setPage(1);
+                    setHasPhone(v);
+                  }}
+                />
+                <ToggleLine
+                  label="Has outstanding balance"
+                  checked={hasBalance}
+                  onChange={(v) => {
+                    setPage(1);
+                    setHasBalance(v);
+                  }}
+                />
               </div>
 
               <div className="flex items-center gap-3">
@@ -550,19 +727,25 @@ export default function ContactsReadOnlyPage() {
                   <DropdownMenuContent align="end" className="w-48">
                     <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    {Object.keys(cols).map((k) => (
-                      <DropdownMenuCheckboxItem
-                        key={k}
-                        checked={cols[k]}
-                        onCheckedChange={(v) => setCols((p) => ({ ...p, [k]: !!v }))}
-                      >
-                        {headerLabel(k as keyof Contact)}
-                      </DropdownMenuCheckboxItem>
-                    ))}
+                    {(Object.keys(cols) as Array<keyof ColumnsState>).map(
+                      (k) => (
+                        <DropdownMenuCheckboxItem
+                          key={k}
+                          checked={cols[k]}
+                          onCheckedChange={(v) =>
+                            setCols((p) => ({ ...p, [k]: Boolean(v) }))
+                          }
+                        >
+                          {headerLabel(k)}
+                        </DropdownMenuCheckboxItem>
+                      ),
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
 
-                <div className="hidden text-sm text-muted-foreground md:block">Rows</div>
+                <div className="hidden text-sm text-muted-foreground md:block">
+                  Rows
+                </div>
                 <Select
                   value={String(pageSize)}
                   onValueChange={(v) => {
@@ -588,230 +771,314 @@ export default function ContactsReadOnlyPage() {
           <CardContent>
             {/* Table */}
             <div className="relative">
-              <div
-                ref={scrollRef}
-                className="overflow-x-auto rounded-md border"
-                style={{
-                  // keep scrollbars stable; no forced left padding
-                  scrollbarGutter: "stable both-edges",
-                }}
-              >
-                <div className="min-w-[1100px]">
-                  <Table className={dense ? "text-sm" : ""}>
-                    <TableHeader className="sticky top-0 z-20 bg-background">
-                      <TableRow>
-                        {cols.name && (
-                          <ThSticky
-                            label="Name"
-                            active={sortBy === "name"}
-                            dir={sortDir}
-                            onSort={() => toggleSort("name")}
-                            className="w-[260px]"
-                          />
-                        )}
-                        {cols.company && (
-                          <Th
-                            label="Company"
-                            active={sortBy === "company"}
-                            dir={sortDir}
-                            onSort={() => toggleSort("company")}
-                            className="w-[220px]"
-                          />
-                        )}
-                        {cols.email && <Th label="Email" className="w-[260px]" />}
-                        {cols.phone && <Th label="Phone" className="w-[180px]" />}
-                        {cols.country && (
-                          <Th
-                            label="Country"
-                            active={sortBy === "country"}
-                            dir={sortDir}
-                            onSort={() => toggleSort("country")}
-                            className="w-[160px]"
-                          />
-                        )}
-                        {cols.type && <Th label="Type" className="w-[120px]" />}
-                        {cols.tags && <Th label="Tags" className="w-[220px]" />}
-                        {cols.balance && (
-                          <Th
-                            label="Balance"
-                            className="w-[140px] text-right"
-                            active={sortBy === "balance"}
-                            dir={sortDir}
-                            onSort={() => toggleSort("balance")}
-                          />
-                        )}
-                        {cols.updatedAt && (
-                          <Th
-                            label="Updated"
-                            active={sortBy === "updatedAt"}
-                            dir={sortDir}
-                            onSort={() => toggleSort("updatedAt")}
-                            className="w-[140px]"
-                          />
-                        )}
-                        <Th label="" className="w-[60px]" />
-                      </TableRow>
-                    </TableHeader>
+              <div ref={scrollRef} className="rounded-md border overflow-hidden">
+                <Table className={`table-fixed w-full ${dense ? "text-sm" : ""}`}>
+                  {/* Column widths total ~100% so no X-scroll */}
+                  <colgroup>
+                    {cols.name && <col className="w-[18%]" />}
+                    {cols.company && <col className="w-[12%]" />}
+                    {cols.email && <col className="w-[16%]" />}
+                    {cols.phone && <col className="w-[10%]" />}
+                    {cols.country && <col className="w-[8%]" />}
+                    {cols.type && <col className="w-[6%]" />}
+                    {cols.tags && <col className="w-[10%]" />}
+                    {cols.balance && <col className="w-[8%]" />}
+                    {cols.updatedAt && <col className="w-[8%]" />}
+                    <col className="w-[4%]" />
+                  </colgroup>
 
-                    <TableBody>
-                      {loading ? (
-                        Array.from({ length: 3 }).map((_, i) => (
-                          <TableRow key={i}>
-                            <TableCell className="py-6" colSpan={12}>
-                              <div className="h-4 w-full animate-pulse rounded bg-muted" />
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      ) : pageData.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={12} className="h-28 text-center text-muted-foreground">
-                            No contacts match your filters.
+                  <TableHeader className="sticky top-0 z-20 bg-background">
+                    <TableRow>
+                      {cols.name && (
+                        <ThSticky
+                          label="Name"
+                          active={sortBy === "name"}
+                          dir={sortDir}
+                          onSort={() => toggleSort("name")}
+                          className="w-[18%]"
+                        />
+                      )}
+                      {cols.company && (
+                        <Th
+                          label="Company"
+                          active={sortBy === "company"}
+                          dir={sortDir}
+                          onSort={() => toggleSort("company")}
+                          className="w-[12%]"
+                        />
+                      )}
+                      {cols.email && <Th label="Email" className="w-[16%]" />}
+                      {cols.phone && <Th label="Phone" className="w-[10%]" />}
+                      {cols.country && (
+                        <Th
+                          label="Country"
+                          active={sortBy === "country"}
+                          dir={sortDir}
+                          onSort={() => toggleSort("country")}
+                          className="w-[8%]"
+                        />
+                      )}
+                      {cols.type && <Th label="Type" className="w-[6%]" />}
+                      {cols.tags && <Th label="Tags" className="w-[10%]" />}
+                      {cols.balance && (
+                        <Th
+                          label="Balance"
+                          className="w-[8%] text-right"
+                          active={sortBy === "balance"}
+                          dir={sortDir}
+                          onSort={() => toggleSort("balance")}
+                        />
+                      )}
+                      {cols.updatedAt && (
+                        <Th
+                          label="Updated"
+                          active={sortBy === "updatedAt"}
+                          dir={sortDir}
+                          onSort={() => toggleSort("updatedAt")}
+                          className="w-[8%]"
+                        />
+                      )}
+                      <Th label="" className="w-[4%]" />
+                    </TableRow>
+                  </TableHeader>
+
+                  <TableBody>
+                    {loading ? (
+                      Array.from({ length: 3 }).map((_, i) => (
+                        <TableRow key={i}>
+                          <TableCell className="py-6" colSpan={12}>
+                            <div className="h-4 w-full animate-pulse rounded bg-muted" />
                           </TableCell>
                         </TableRow>
-                      ) : (
-                        pageData.map((c) => (
-                          <TableRow key={c.id} className="hover:bg-muted/30">
-                            {cols.name && (
-                              <TdSticky className="w-[260px]">
-                                <div className="flex items-center gap-3">
-                                  <Avatar className="h-9 w-9">
-                                    <AvatarFallback>{initials(c.name)}</AvatarFallback>
-                                  </Avatar>
-                                  <div>
-                                    <div className="max-w-[200px] truncate font-medium">{c.name}</div>
-                                    {c.company ? (
-                                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                        <Building2 className="h-3.5 w-3.5" />
-                                        <span className="max-w-[200px] truncate">{c.company}</span>
-                                      </div>
-                                    ) : null}
+                      ))
+                    ) : pageData.length === 0 ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={12}
+                          className="h-28 text-center text-muted-foreground"
+                        >
+                          No contacts match your filters.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      pageData.map((c) => (
+                        <TableRow key={c.id} className="hover:bg-muted/30">
+                          {cols.name && (
+                            <TdSticky className="w-[18%] overflow-hidden">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <Avatar className="h-9 w-9 shrink-0">
+                                  <AvatarFallback>
+                                    {initials(c.name)}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div className="min-w-0">
+                                  <div className="truncate font-medium">
+                                    {c.name}
                                   </div>
+                                  {c.company ? (
+                                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                      <Building2 className="h-3.5 w-3.5 shrink-0" />
+                                      <span className="truncate">
+                                        {c.company}
+                                      </span>
+                                    </div>
+                                  ) : null}
                                 </div>
-                              </TdSticky>
-                            )}
+                              </div>
+                            </TdSticky>
+                          )}
 
-                            {cols.company && (
-                              <TableCell className="max-w-[200px] truncate">{c.company || "—"}</TableCell>
-                            )}
-
-                            {cols.email && (
-                              <TableCell className="whitespace-nowrap">
-                                <div className="flex items-center gap-2">
-                                  {c.email ? (
-                                    <>
-                                      <Mail className="h-4 w-4 text-muted-foreground" />
-                                      <button
-                                        className="max-w-[190px] truncate hover:underline"
-                                        onClick={() => (window.location.href = `mailto:${c.email}`)}
-                                      >
-                                        {c.email}
-                                      </button>
-                                      <IconButton title="Copy email" onClick={() => copyToClipboard(c.email!)}>
-                                        <Copy className="h-3.5 w-3.5" />
-                                      </IconButton>
-                                    </>
-                                  ) : (
-                                    <span className="text-muted-foreground">—</span>
-                                  )}
-                                </div>
-                              </TableCell>
-                            )}
-
-                            {cols.phone && (
-                              <TableCell className="whitespace-nowrap">
-                                <div className="flex items-center gap-2">
-                                  {c.phone ? (
-                                    <>
-                                      <Phone className="h-4 w-4 text-muted-foreground" />
-                                      <a
-                                        className="max-w-[120px] truncate hover:underline"
-                                        href={`tel:${c.phone.replace(/\s/g, "")}`}
-                                      >
-                                        {c.phone}
-                                      </a>
-                                      <IconButton title="Copy phone" onClick={() => copyToClipboard(c.phone!)}>
-                                        <Copy className="h-3.5 w-3.5" />
-                                      </IconButton>
-                                    </>
-                                  ) : (
-                                    <span className="text-muted-foreground">—</span>
-                                  )}
-                                </div>
-                              </TableCell>
-                            )}
-
-                            {cols.country && <TableCell className="whitespace-nowrap">{c.country || "—"}</TableCell>}
-
-                            {cols.type && (
-                              <TableCell>
-                                <TypeBadge contact={c} />
-                              </TableCell>
-                            )}
-
-                            {cols.tags && (
-                              <TableCell>
-                                <div className="flex max-w-[200px] flex-wrap gap-1">
-                                  {c.tags.length ? (
-                                    c.tags.map((t) => (
-                                      <Badge key={t} variant="secondary" className="px-2 py-0.5">
-                                        {t}
-                                      </Badge>
-                                    ))
-                                  ) : (
-                                    <span className="text-muted-foreground">—</span>
-                                  )}
-                                </div>
-                              </TableCell>
-                            )}
-
-                            {cols.balance && (
-                              <TableCell className={`text-right ${c.balance > 0 ? "font-medium" : ""}`}>
-                                {fmtMoney(c.balance)}
-                              </TableCell>
-                            )}
-
-                            {cols.updatedAt && (
-                              <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                                {timeAgo(c.updatedAt)}
-                              </TableCell>
-                            )}
-
-                            <TableCell className="w-0 text-right">
-                              <Button size="icon" variant="ghost" onClick={() => setOpenContact(c)}>
-                                <Eye className="h-4 w-4" />
-                              </Button>
+                          {cols.company && (
+                            <TableCell className="w-[12%] overflow-hidden">
+                              <span className="block truncate">
+                                {c.company || "—"}
+                              </span>
                             </TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
+                          )}
+
+                          {cols.email && (
+                            <TableCell className="w-[16%] overflow-hidden">
+                              <div className="flex items-center gap-2 min-w-0">
+                                {c.email ? (
+                                  <>
+                                    <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
+                                    <button
+                                      className="block min-w-0 flex-1 truncate text-left hover:underline"
+                                      onClick={() =>
+                                        (window.location.href = `mailto:${c.email}`)
+                                      }
+                                    >
+                                      {c.email}
+                                    </button>
+                                    <IconButton
+                                      title="Copy email"
+                                      onClick={() =>
+                                        copyToClipboard(c.email as string)
+                                      }
+                                    >
+                                      <Copy className="h-3.5 w-3.5" />
+                                    </IconButton>
+                                  </>
+                                ) : (
+                                  <span className="text-muted-foreground">
+                                    —
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
+                          )}
+
+                          {cols.phone && (
+                            <TableCell className="w-[10%] overflow-hidden">
+                              <div className="flex items-center gap-2 min-w-0">
+                                {c.phone ? (
+                                  <>
+                                    <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
+                                    <a
+                                      className="block min-w-0 flex-1 truncate hover:underline"
+                                      href={`tel:${(c.phone || "").replace(/\s/g, "")}`}
+                                    >
+                                      {c.phone}
+                                    </a>
+                                    <IconButton
+                                      title="Copy phone"
+                                      onClick={() =>
+                                        copyToClipboard(c.phone as string)
+                                      }
+                                    >
+                                      <Copy className="h-3.5 w-3.5" />
+                                    </IconButton>
+                                  </>
+                                ) : (
+                                  <span className="text-muted-foreground">
+                                    —
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
+                          )}
+
+                          {cols.country && (
+                            <TableCell className="w-[8%] overflow-hidden">
+                              <span className="block truncate">
+                                {c.country || "—"}
+                              </span>
+                            </TableCell>
+                          )}
+
+                          {cols.type && (
+                            <TableCell className="w-[6%] overflow-hidden">
+                              <TypeBadge contact={c} />
+                            </TableCell>
+                          )}
+
+                          {cols.tags && (
+                            <TableCell className="w-[10%] overflow-hidden">
+                              <div className="flex flex-wrap gap-1">
+                                {c.tags.length ? (
+                                  c.tags.map((t) => (
+                                    <Badge
+                                      key={t}
+                                      variant="secondary"
+                                      className="px-2 py-0.5"
+                                    >
+                                      <span className="truncate max-w-[8rem]">
+                                        {t}
+                                      </span>
+                                    </Badge>
+                                  ))
+                                ) : (
+                                  <span className="text-muted-foreground">
+                                    —
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
+                          )}
+
+                          {cols.balance && (
+                            <TableCell
+                              className={`w-[8%] text-right ${
+                                c.balance > 0 ? "font-medium" : ""
+                              }`}
+                            >
+                              {fmtMoney(c.balance)}
+                            </TableCell>
+                          )}
+
+                          {cols.updatedAt && (
+                            <TableCell className="w-[8%] overflow-hidden text-sm text-muted-foreground">
+                              <span className="block truncate">
+                                {timeAgo(c.updatedAt)}
+                              </span>
+                            </TableCell>
+                          )}
+
+                          <TableCell className="w-[4%] text-right">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => setOpenContact(c)}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
               </div>
             </div>
 
             {/* Pagination */}
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
               <div className="text-sm text-muted-foreground">
-                Showing <span className="font-medium">{(page - 1) * pageSize + 1}</span>–
-                <span className="font-medium">{Math.min(page * pageSize, filtered.length)}</span>{" "}
+                Showing{" "}
+                <span className="font-medium">
+                  {(page - 1) * pageSize + 1}
+                </span>
+                –
+                <span className="font-medium">
+                  {Math.min(page * pageSize, filtered.length)}
+                </span>{" "}
                 of <span className="font-medium">{filtered.length}</span>
               </div>
 
               <div className="flex items-center gap-1">
-                <Button variant="outline" size="icon" onClick={() => setPage(1)} disabled={page === 1}>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setPage(1)}
+                  disabled={page === 1}
+                >
                   <ChevronsLeft className="h-4 w-4" />
                 </Button>
-                <Button variant="outline" size="icon" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
                 <div className="mx-2 min-w-[90px] text-center text-sm">
                   Page {page} / {totalPages}
                 </div>
-                <Button variant="outline" size="icon" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                >
                   <ChevronRight className="h-4 w-4" />
                 </Button>
-                <Button variant="outline" size="icon" onClick={() => setPage(totalPages)} disabled={page === totalPages}>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setPage(totalPages)}
+                  disabled={page === totalPages}
+                >
                   <ChevronsRight className="h-4 w-4" />
                 </Button>
               </div>
@@ -821,12 +1088,17 @@ export default function ContactsReadOnlyPage() {
       </div>
 
       {/* Quick View */}
-      <Sheet open={!!openContact} onOpenChange={(o) => !o && setOpenContact(null)}>
+      <Sheet
+        open={!!openContact}
+        onOpenChange={(o) => !o && setOpenContact(null)}
+      >
         <SheetContent className="w-[520px] sm:max-w-none">
           <SheetHeader>
             <SheetTitle className="flex items-center gap-3">
               <Avatar className="h-10 w-10">
-                <AvatarFallback>{initials(openContact?.name || "")}</AvatarFallback>
+                <AvatarFallback>
+                  {initials(openContact?.name || "")}
+                </AvatarFallback>
               </Avatar>
               {openContact?.name || "Contact"}
             </SheetTitle>
@@ -842,12 +1114,24 @@ export default function ContactsReadOnlyPage() {
                 value={
                   openContact.email ? (
                     <span className="inline-flex items-center gap-2">
-                      <a className="hover:underline" href={`mailto:${openContact.email}`}>{openContact.email}</a>
-                      <IconButton title="Copy" onClick={() => copyToClipboard(openContact.email!)}>
+                      <a
+                        className="hover:underline"
+                        href={`mailto:${openContact.email}`}
+                      >
+                        {openContact.email}
+                      </a>
+                      <IconButton
+                        title="Copy"
+                        onClick={() =>
+                          copyToClipboard(openContact.email as string)
+                        }
+                      >
                         <Copy className="h-3.5 w-3.5" />
                       </IconButton>
                     </span>
-                  ) : "—"
+                  ) : (
+                    "—"
+                  )
                 }
               />
               <InfoRow
@@ -855,25 +1139,46 @@ export default function ContactsReadOnlyPage() {
                 value={
                   openContact.phone ? (
                     <span className="inline-flex items-center gap-2">
-                      <a className="hover:underline" href={`tel:${openContact.phone.replace(/\s/g, "")}`}>{openContact.phone}</a>
-                      <IconButton title="Copy" onClick={() => copyToClipboard(openContact.phone!)}>
+                      <a
+                        className="hover:underline"
+                        href={`tel:${openContact.phone.replace(/\s/g, "")}`}
+                      >
+                        {openContact.phone}
+                      </a>
+                      <IconButton
+                        title="Copy"
+                        onClick={() =>
+                          copyToClipboard(openContact.phone as string)
+                        }
+                      >
                         <Copy className="h-3.5 w-3.5" />
                       </IconButton>
                     </span>
-                  ) : "—"
+                  ) : (
+                    "—"
+                  )
                 }
               />
               <InfoRow label="Country" value={openContact.country || "—"} />
               <InfoRow
                 label="Tags"
                 value={
-                  openContact.tags.length ? openContact.tags.map((t) => (
-                    <Badge key={t} variant="secondary" className="mr-1">{t}</Badge>
-                  )) : "—"
+                  openContact.tags.length ? (
+                    openContact.tags.map((t) => (
+                      <Badge key={t} variant="secondary" className="mr-1">
+                        {t}
+                      </Badge>
+                    ))
+                  ) : (
+                    "—"
+                  )
                 }
               />
               <InfoRow label="Type" value={<TypeBadge contact={openContact} />} />
-              <InfoRow label="Outstanding balance" value={fmtMoney(openContact.balance)} />
+              <InfoRow
+                label="Outstanding balance"
+                value={fmtMoney(openContact.balance)}
+              />
               <InfoRow label="Updated" value={timeAgo(openContact.updatedAt)} />
             </div>
           )}
@@ -914,8 +1219,12 @@ function Th({
       aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}
     >
       <div className="flex items-center gap-1">
-        <span>{label}</span>
-        {onSort ? <ArrowUpDown className={`h-3.5 w-3.5 ${active ? "" : "text-muted-foreground"}`} /> : null}
+        <span className="truncate">{label}</span>
+        {onSort ? (
+          <ArrowUpDown
+            className={`h-3.5 w-3.5 ${active ? "" : "text-muted-foreground"}`}
+          />
+        ) : null}
       </div>
     </TableHead>
   );
@@ -940,7 +1249,6 @@ function ThSticky({
       style={{ left: "var(--sticky-offset, 0px)" }}
       className={[
         "sticky z-30 bg-background relative",
-        // add a hairline on the right edge
         "after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-border",
         "select-none",
         onSort ? "cursor-pointer" : "",
@@ -949,21 +1257,31 @@ function ThSticky({
       aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}
     >
       <div className="flex items-center gap-1">
-        <span>{label}</span>
-        {onSort ? <ArrowUpDown className={`h-3.5 w-3.5 ${active ? "" : "text-muted-foreground"}`} /> : null}
+        <span className="truncate">{label}</span>
+        {onSort ? (
+          <ArrowUpDown
+            className={`h-3.5 w-3.5 ${active ? "" : "text-muted-foreground"}`}
+          />
+        ) : null}
       </div>
     </TableHead>
   );
 }
 
-function TdSticky({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+function TdSticky({
+  children,
+  className = "",
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
   return (
     <TableCell
       style={{ left: "var(--sticky-offset, 0px)" }}
       className={[
         "sticky z-20 bg-background relative",
         "after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-border",
-        "whitespace-nowrap",
+        "whitespace-normal",
         className,
       ].join(" ")}
     >
@@ -989,10 +1307,12 @@ function ToggleLine({
   );
 }
 
-function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
+function InfoRow({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="space-y-1">
-      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="text-xs uppercase tracking-wide text-muted-foreground">
+        {label}
+      </div>
       <div className="text-sm">{value}</div>
     </div>
   );
@@ -1005,10 +1325,15 @@ function IconButton({
 }: {
   title: string;
   onClick: () => void;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <button title={title} onClick={onClick} className="rounded p-1 hover:bg-muted" type="button">
+    <button
+      title={title}
+      onClick={onClick}
+      className="rounded p-1 hover:bg-muted"
+      type="button"
+    >
       {children}
     </button>
   );
@@ -1032,12 +1357,18 @@ function TypeBadge({ contact }: { contact: Contact }) {
 
 function typeLabel(t: TypeFilter) {
   switch (t) {
-    case "all": return "All";
-    case "customer": return "Customer";
-    case "supplier": return "Supplier";
-    case "both": return "Both";
-    case "other": return "Other";
-    case "archived": return "Archived";
+    case "all":
+      return "All";
+    case "customer":
+      return "Customer";
+    case "supplier":
+      return "Supplier";
+    case "both":
+      return "Both";
+    case "other":
+      return "Other";
+    case "archived":
+      return "Archived";
   }
 }
 
@@ -1071,7 +1402,10 @@ function timeAgo(iso: string) {
 
 function fmtMoney(n: number, currency = "INR") {
   try {
-    return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(n);
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency,
+    }).format(n);
   } catch {
     return `${currency} ${n.toFixed(2)}`;
   }
@@ -1094,7 +1428,9 @@ function headerLabel(k: keyof Contact | string) {
 
 function csvEscape(v: unknown): string {
   const s = String(v ?? "");
-  return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
+  return s.includes(",") || s.includes('"') || s.includes("\n")
+    ? `"${s.replace(/"/g, '""')}"`
+    : s;
 }
 
 function copyToClipboard(text: string) {
