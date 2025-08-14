@@ -108,6 +108,8 @@ export default function XeroPage() {
       toast.success("Connected to Xero");
       // optional refresh
       fetchStatus().catch(() => {});
+      handlePing().catch(() => {});
+
       window.history.replaceState({}, "", window.location.pathname);
     } else if (e) {
       toast.error(e);
