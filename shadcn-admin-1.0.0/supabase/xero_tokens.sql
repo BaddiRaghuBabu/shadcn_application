@@ -4,6 +4,8 @@ create table if not exists xero_tokens (
   tenant_id text not null,
   access_token text not null,
   refresh_token text not null,
-  created_at timestamptz not null default now()
+  expires_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 

@@ -7,8 +7,7 @@ import { xero } from "@/lib/xeroService"
  * OAuth2 callback:
  * - Exchanges code for tokens
  * - Finds first tenant (organisation)
- * - Upserts { tenant_id, access_token, refresh_token } into `xero_tokens`
- * - Redirects back to /xero?connected=1
+ * - Upserts { tenant_id, access_token, refresh_token, expires_at, updated_at } into `xero_tokens * - Redirects back to /xero?connected=1
  */
 export async function GET(req: NextRequest) {
   try {
@@ -31,7 +30,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Persist tokens
-     const supabase = getSupabaseAdminClient()
+    const supabase = getSupabaseAdminClient()
 
     const expiresIn = tokenSet.expires_in ?? 1800
     const expiresAtIso = new Date(Date.now() + expiresIn * 1000).toISOString()
@@ -42,6 +41,8 @@ export async function GET(req: NextRequest) {
         access_token: tokenSet.access_token!,
         refresh_token: tokenSet.refresh_token!,
         expires_at: expiresAtIso,
+        updated_at: new Date().toISOString(),
+
       },
       { onConflict: "tenant_id" }
     )
@@ -52,7 +53,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Success
-     return NextResponse.redirect(
+    return NextResponse.redirect(
       new URL("/connection-xero?connected=1", req.url)
     )
   } catch (err) {
