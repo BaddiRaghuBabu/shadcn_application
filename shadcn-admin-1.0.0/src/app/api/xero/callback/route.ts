@@ -16,9 +16,14 @@ export async function GET(req: NextRequest) {
     const tokenSet = await xero.apiCallback(req.url);
     xero.setTokenSet(tokenSet);
 
-    // Determine tenant ID (first tenant)
+    // Determine tenant ID - pick the most recently authorized tenant
     const tenants = await xero.updateTenants();
-    const tenantId = tenants?.[0]?.tenantId;
+  const tenantId = tenants
+      ?.sort((a, b) => {
+        const aDate = new Date(a.updatedDateUtc ?? a.createdDateUtc ?? 0);
+        const bDate = new Date(b.updatedDateUtc ?? b.createdDateUtc ?? 0);
+        return bDate.getTime() - aDate.getTime();
+      })[0]?.tenantId;
 
     if (!tenantId) {
       return NextResponse.redirect(

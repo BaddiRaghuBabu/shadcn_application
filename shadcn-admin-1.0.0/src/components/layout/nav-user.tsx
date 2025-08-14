@@ -33,7 +33,9 @@ interface UserProfile {
 }
 
 // wrap AvatarImage in motion
-const MotionAvatarImage = motion(AvatarImage);
+// wrap AvatarImage in motion using the new `motion.create` API
+// `motion()` was deprecated in Framer Motion 12
+const MotionAvatarImage = motion.create(AvatarImage);
 
 export function NavUser() {
   const { isMobile } = useSidebar()

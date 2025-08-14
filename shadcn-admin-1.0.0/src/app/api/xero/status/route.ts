@@ -29,7 +29,12 @@ export async function GET() {
 
   try {
     const tenants = await xero.updateTenants();
-    const tenant = tenants?.[0];
+   const tenant = tenants
+      ?.sort((a, b) => {
+        const aDate = new Date(a.updatedDateUtc ?? a.createdDateUtc ?? 0);
+        const bDate = new Date(b.updatedDateUtc ?? b.createdDateUtc ?? 0);
+        return bDate.getTime() - aDate.getTime();
+      })[0];
     tenantName = tenant?.tenantName ?? null;
     const orgData = tenant?.orgData as { isDemoCompany?: boolean } | undefined;
     environment = orgData?.isDemoCompany ? "sandbox" : "live";
