@@ -1,10 +1,13 @@
-// src/app/api/xero/connect/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 
 /**
- * Builds the consent URL (supports dynamic scopes from query string).
- * Example: /api/xero/connect?scopes=openid%20profile%20email%20offline_access
- * `env` may be sent from the UI but is not required here.
+ * Builds the consent URL (supports dynamic query overrides):
+ *   /api/xero/connect?client_id=...&redirect_uri=...&scopes=openid%20profile%20...
+ *
+ * - Falls back to env if a param is missing
+ * - Adds PKCE (S256) + state
+ * - Stores state, PKCE verifier, and chosen client/redirect in short-lived HttpOnly cookies
  */
 
 function mask(val?: string | null, keep = 4) {
@@ -12,71 +15,81 @@ function mask(val?: string | null, keep = 4) {
   const k = Math.min(keep, Math.floor(val.length / 2));
   return `${val.slice(0, k)}…${val.slice(-k)}`;
 }
+function b64url(bytes: Buffer) {
+  return bytes.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+function genPkce() {
+  const verifier = b64url(crypto.randomBytes(32));
+  const challenge = b64url(crypto.createHash("sha256").update(verifier).digest());
+  return { verifier, challenge };
+}
+function randomState() {
+  return b64url(crypto.randomBytes(16));
+}
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   console.log("[/api/xero/connect] START");
-  console.log("[/api/xero/connect] Path:", url.pathname);
-  console.log("[/api/xero/connect] Query keys:", Array.from(url.searchParams.keys()));
 
   try {
-    const envParam = url.searchParams.get("env") ?? null;
     const scopesFromQuery = url.searchParams.get("scopes");
-    console.log("[/api/xero/connect] env param:", envParam ?? "—");
-    console.log("[/api/xero/connect] scopes (query):", scopesFromQuery ?? "—");
-
     const defaultScopes =
       process.env.XERO_SCOPES ??
       "openid profile email offline_access accounting.contacts accounting.transactions accounting.settings";
-    const scopesParam = scopesFromQuery ?? defaultScopes;
-    console.log("[/api/xero/connect] scopes (effective):", scopesParam);
+    const scopes = scopesFromQuery ?? defaultScopes;
 
-    const clientId = process.env.XERO_CLIENT_ID;
-    const redirectUri = process.env.XERO_REDIRECT_URI;
+    // client/redirect: query > env
+    const clientId = url.searchParams.get("client_id") ?? process.env.XERO_CLIENT_ID ?? "";
+    const redirectUri = url.searchParams.get("redirect_uri") ?? process.env.XERO_REDIRECT_URI ?? "";
 
-    console.log("[/api/xero/connect] Env check:", {
-      XERO_CLIENT_ID: mask(clientId),
-      XERO_REDIRECT_URI: redirectUri ?? "null",
-      XERO_SCOPES_present: !!process.env.XERO_SCOPES,
+    console.log("[/api/xero/connect] Using:", {
+      clientId: mask(clientId),
+      redirectUri: redirectUri || "null",
+      scopes_preview: scopes.split(" ").slice(0, 5).join(" ") + " …",
     });
 
     if (!clientId || !redirectUri) {
-      console.error("[/api/xero/connect] Missing required env(s).", {
-        hasClientId: !!clientId,
-        hasRedirectUri: !!redirectUri,
-      });
       return NextResponse.json(
-        { error: "Missing XERO_CLIENT_ID or XERO_REDIRECT_URI" },
-        { status: 500 }
+        { error: "Missing client_id or redirect_uri (query or env)" },
+        { status: 400 }
       );
     }
 
+    // PKCE + state
+    const { verifier, challenge } = genPkce();
+    const state = randomState();
+
+    // Build Xero authorize URL
     const authorize = new URL("https://login.xero.com/identity/connect/authorize");
     authorize.searchParams.set("response_type", "code");
     authorize.searchParams.set("client_id", clientId);
     authorize.searchParams.set("redirect_uri", redirectUri);
-    authorize.searchParams.set("scope", scopesParam);
+    authorize.searchParams.set("scope", scopes);
     authorize.searchParams.set("prompt", "select_account");
+    authorize.searchParams.set("state", state);
+    authorize.searchParams.set("code_challenge", challenge);
+    authorize.searchParams.set("code_challenge_method", "S256");
 
-    console.log("[/api/xero/connect] Built authorize URL with params:", {
-      response_type: authorize.searchParams.get("response_type"),
-      client_id: mask(authorize.searchParams.get("client_id")),
-      redirect_uri: authorize.searchParams.get("redirect_uri"),
-      scope_preview: (authorize.searchParams.get("scope") || "").split(" ").slice(0, 5).join(" ") + " …",
-      prompt: authorize.searchParams.get("prompt"),
-    });
+    const res = NextResponse.redirect(authorize.toString());
+    const cookie = {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax" as const,
+      maxAge: 10 * 60, // 10 min
+      path: "/",
+    };
+
+    // Save for callback
+    res.cookies.set("xero_oauth_state", state, cookie);
+    res.cookies.set("xero_pkce_verifier", verifier, cookie);
+    res.cookies.set("xero_client_id", clientId, cookie);
+    res.cookies.set("xero_redirect_uri", redirectUri, cookie);
 
     console.log("[/api/xero/connect] Redirecting →", authorize.toString());
     console.log("[/api/xero/connect] END");
-    return NextResponse.redirect(authorize);
+    return res;
   } catch (err: any) {
-    const msg = err instanceof Error ? err.message : "Unexpected error";
-    console.error("[/api/xero/connect] ERROR:", {
-      message: msg,
-      name: err?.name ?? null,
-      stack: err?.stack ?? null,
-    });
-    console.log("[/api/xero/connect] END (error)");
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error("[/api/xero/connect] ERROR:", err?.message ?? err);
+    return NextResponse.json({ error: err?.message ?? "Unexpected error" }, { status: 500 });
   }
 }

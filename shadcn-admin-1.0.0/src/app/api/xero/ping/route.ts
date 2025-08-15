@@ -1,3 +1,4 @@
+// \app\api\xero\ping
 import { NextResponse } from "next/server"
 import { getSupabaseAdminClient } from "@/lib/supabaseClient"
 import { xero } from "@/lib/xeroService"
