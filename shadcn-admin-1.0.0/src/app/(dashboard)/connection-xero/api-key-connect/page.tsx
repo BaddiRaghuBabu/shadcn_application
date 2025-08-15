@@ -3,10 +3,12 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import NProgress from "nprogress";
+import "nprogress/nprogress.css";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { toast } from "sonner";
+import { toast, Toaster } from "sonner";
 import {
   ArrowLeft,
   Clipboard,
@@ -15,7 +17,6 @@ import {
   Link2,
   Loader2,
   Shield,
-  AlertTriangle,
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -26,19 +27,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 
+NProgress.configure({
+  showSpinner: false,
+  trickleSpeed: 120,
+  minimum: 0.08,
+});
+
 /* ------------------------------------------------------- */
-/* Schema — config-less: we only send client_id/redirect/scopes via query */
 const XeroConfigSchema = z.object({
   applicationUrl: z.string().url("Enter a valid URL").optional().or(z.literal("")),
   redirectUri: z.string().url("Enter a valid URL").optional().or(z.literal("")),
   clientId: z.string().min(10, "Client ID looks too short"),
-  // NOTE: Client secret is NOT sent anywhere from this page (display only)
-  clientSecret: z.string().optional().or(z.literal("")),
+  clientSecret: z.string().min(10, "Client Secret looks too short"),
   scopes: z.string().min(1),
 });
 type XeroConfig = z.infer<typeof XeroConfigSchema>;
 
-/* ------------------------------------------------------- */
 function FieldHelp({ children }: { children: React.ReactNode }) {
   return <p className="text-[11px] text-muted-foreground">{children}</p>;
 }
@@ -60,7 +64,6 @@ function CopyBtn({ value, label }: { value: string; label: string }) {
   );
 }
 
-/** Build a RELATIVE preview URL so SSR and client match exactly */
 function buildRelativePreview() {
   return "/api/xero/connect";
 }
@@ -68,8 +71,7 @@ function buildRelativePreview() {
 export default function ApiKeyConnectPage() {
   const router = useRouter();
   const [reveal, setReveal] = useState(false);
-  const [hasSecret, setHasSecret] = useState(false);
-
+  const [connecting, setConnecting] = useState(false);
 
   const form = useForm<XeroConfig>({
     resolver: zodResolver(XeroConfigSchema),
@@ -84,7 +86,6 @@ export default function ApiKeyConnectPage() {
     mode: "onChange",
   });
 
-  // Prefill from origin and load existing settings
   useEffect(() => {
     const origin = typeof window !== "undefined" ? window.location.origin : "";
     if (origin) {
@@ -93,78 +94,123 @@ export default function ApiKeyConnectPage() {
       if (!form.getValues("redirectUri"))
         form.setValue("redirectUri", `${origin}/api/xero/callback`, { shouldDirty: true });
     }
-      fetch("/api/xero/settings")
-      .then((res) => res.json())
-      .then((cfg) => {
-        if (cfg.clientId) form.setValue("clientId", cfg.clientId);
-        if (cfg.redirectUri) form.setValue("redirectUri", cfg.redirectUri);
-        if (cfg.scopes) form.setValue("scopes", cfg.scopes);
-        setHasSecret(Boolean(cfg.hasClientSecret));
-      })
-      .catch(() => undefined);
+    const load = async () => {
+      try {
+        NProgress.start();
+        const res = await fetch("/api/xero/settings");
+        if (!res.ok) throw new Error();
+        const cfg = await res.json();
+
+        if (cfg.clientId) form.setValue("clientId", cfg.clientId, { shouldDirty: true, shouldValidate: true });
+        if (cfg.clientSecret) form.setValue("clientSecret", cfg.clientSecret, { shouldDirty: true, shouldValidate: true });
+        if (cfg.redirectUri) form.setValue("redirectUri", cfg.redirectUri, { shouldDirty: true, shouldValidate: true });
+        if (cfg.scopes) form.setValue("scopes", cfg.scopes, { shouldDirty: true, shouldValidate: true });
+      } catch {
+        if (!navigator.onLine) toast.error("No internet connection");
+        else toast.error("Failed to load settings");
+      } finally {
+        NProgress.done();
+      }
+    };
+    load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const submitting = form.formState.isSubmitting;
 
-  // No POST — we just redirect with query to /api/xero/connect
   const onSubmit = form.handleSubmit(async (values) => {
- try {
+    try {
+      setConnecting(true);
+      NProgress.start(); // show top bar immediately
+
       const res = await fetch("/api/xero/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           clientId: values.clientId,
-          clientSecret: values.clientSecret || undefined,
+          clientSecret: values.clientSecret,
           redirectUri: values.redirectUri,
           scopes: values.scopes,
         }),
       });
-      if (!res.ok) throw new Error(await res.text());
-      window.location.href = "/api/xero/connect";
+
+      if (!res.ok) {
+        NProgress.done();
+        setConnecting(false);
+        toast.error("Server error while saving settings");
+        return;
+      }
+
+      // Give the bar a moment to paint before redirecting
+      await new Promise((r) => setTimeout(r, 150));
+
+      // Keep NProgress running; page will unload as we leave
+      window.location.assign("/api/xero/connect");
     } catch {
-      toast.error("Failed to save settings");
+      if (!navigator.onLine) toast.error("No internet connection");
+      else toast.error("Failed to save settings");
+      NProgress.done();
+      setConnecting(false);
     }
+    // NOTE: no NProgress.done() on success so the bar stays until navigation happens
   });
 
   const previewHref = useMemo(() => buildRelativePreview(), []);
 
+  const [clientId, clientSecret, redirectUri, scopes, applicationUrl] = form.watch([
+    "clientId",
+    "clientSecret",
+    "redirectUri",
+    "scopes",
+    "applicationUrl",
+  ]);
+  const hasAnyInput =
+    [clientId, clientSecret, redirectUri, scopes, applicationUrl].some(
+      (v) => (v ?? "").toString().trim().length > 0
+    );
+  const canContinue = form.formState.isValid && !submitting && !connecting;
 
   return (
     <div className="mx-auto w-full max-w-none p-4 md:p-8">
+      {/* NProgress styling tweaks */}
+      <style jsx global>{`
+        #nprogress .bar { background: #2563eb; height: 3px; }
+        #nprogress .peg { box-shadow: 0 0 10px #2563eb, 0 0 5px #2563eb; }
+      `}</style>
+
+      <Toaster position="bottom-right" />
+
       <div className="mb-4 flex items-center justify-between">
-        <Button variant="ghost" className="gap-2" onClick={() => router.back()} title="Back">
+        <Button variant="ghost" className="gap-2" onClick={() => router.back()} title="Back" disabled={connecting}>
           <ArrowLeft className="h-4 w-4" />
           Back
         </Button>
 
         <div className="flex items-center gap-2">
-          <Badge variant="outline" className="text-[11px]">Secure mode</Badge>        
-          </div>
+          <Badge variant="outline" className="text-[11px]">Secure mode</Badge>
+        </div>
       </div>
 
       <Card className="border-muted">
         <CardHeader>
           <CardTitle>Connect Xero — Step 1: API Credentials</CardTitle>
           <CardDescription>
-            Store credentials in Supabase. Client Secret never leaves the server.
+            Store credentials in Supabase. Keep your Client Secret secure.
           </CardDescription>
         </CardHeader>
 
         <CardContent className="grid gap-6">
-          {/* Security note */}
           <div className="flex items-start gap-2 rounded-lg border p-3">
             <Shield className="mt-0.5 h-4 w-4 text-emerald-600" />
             <div className="text-sm">
-              <strong>Security tip:</strong> Don’t send Client Secret from the browser. This page does <em>not</em> transmit it.
+              <strong>Security tip:</strong> Handle your Client Secret carefully and rotate it if exposed.
             </div>
           </div>
 
-          {/* Application URL */}
           <div className="grid gap-1.5">
             <Label htmlFor="applicationUrl">Application URL</Label>
             <div className="flex items-center gap-2">
-              <Input id="applicationUrl" placeholder="https://yourapp.example" {...form.register("applicationUrl")} />
+              <Input id="applicationUrl" placeholder="https://yourapp.example" {...form.register("applicationUrl")} disabled={connecting}/>
               <CopyBtn value={form.watch("applicationUrl") || ""} label="Application URL" />
             </div>
             {form.formState.errors.applicationUrl && (
@@ -173,11 +219,10 @@ export default function ApiKeyConnectPage() {
             <FieldHelp>Public base URL of your app. Add it in your Xero app’s configuration.</FieldHelp>
           </div>
 
-          {/* Redirect URI */}
           <div className="grid gap-1.5">
             <Label htmlFor="redirectUri">Redirect URI</Label>
             <div className="flex items-center gap-2">
-              <Input id="redirectUri" placeholder="https://yourapp.example/api/xero/callback" {...form.register("redirectUri")} />
+              <Input id="redirectUri" placeholder="https://yourapp.example/api/xero/callback" {...form.register("redirectUri")} disabled={connecting}/>
               <CopyBtn value={form.watch("redirectUri") || ""} label="Redirect URI" />
             </div>
             {form.formState.errors.redirectUri && (
@@ -188,24 +233,23 @@ export default function ApiKeyConnectPage() {
 
           <Separator />
 
-          {/* Client ID */}
           <div className="grid gap-1.5">
             <Label htmlFor="clientId">Client ID</Label>
-            <Input id="clientId" placeholder="xxxxxxxxxxxxxxxx" {...form.register("clientId")} />
+            <Input id="clientId" placeholder="xxxxxxxxxxxxxxxx" {...form.register("clientId")} disabled={connecting}/>
             {form.formState.errors.clientId && (
               <p className="text-xs text-rose-600">{form.formState.errors.clientId.message}</p>
             )}
           </div>
 
-          {/* Client Secret (display only — not submitted) */}
           <div className="grid gap-1.5">
-            <Label htmlFor="clientSecret">Client Secret (not sent)</Label>
+            <Label htmlFor="clientSecret">Client Secret</Label>
             <div className="flex items-center gap-2">
               <Input
                 id="clientSecret"
                 type={reveal ? "text" : "password"}
-                placeholder={hasSecret ? "•••••••••••••••" : ""}
+                placeholder="•••••••••••••••"
                 {...form.register("clientSecret")}
+                disabled={connecting}
               />
               <Button
                 type="button"
@@ -214,38 +258,40 @@ export default function ApiKeyConnectPage() {
                 className="h-8 w-8"
                 onClick={() => setReveal((x) => !x)}
                 title={reveal ? "Hide" : "Show"}
+                disabled={connecting}
               >
                 {reveal ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </Button>
             </div>
-            <div className="flex items-start gap-2 text-[12px] text-amber-700">
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5" />
-              <span>Leave blank to keep existing secret. It is stored server-side.</span>
-            </div>
+            {form.formState.errors.clientSecret && (
+              <p className="text-xs text-rose-600">{form.formState.errors.clientSecret.message}</p>
+            )}
           </div>
 
-          {/* Scopes */}
           <div className="grid gap-1.5">
             <Label htmlFor="scopes">Scopes</Label>
-            <Textarea id="scopes" rows={2} {...form.register("scopes")} />
+            <Textarea id="scopes" rows={2} {...form.register("scopes")} disabled={connecting}/>
             {form.formState.errors.scopes && (
               <p className="text-xs text-rose-600">{form.formState.errors.scopes.message}</p>
             )}
             <FieldHelp>Include <code>offline_access</code> to receive refresh tokens.</FieldHelp>
           </div>
 
-          {/* Actions */}
           <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-            <Button type="button" variant="outline" onClick={() => router.push("/connection-xero")}>
+            <Button type="button" variant="outline" onClick={() => router.push("/connection-xero")} disabled={connecting}>
               Cancel
             </Button>
-            <Button onClick={onSubmit} disabled={!form.formState.isValid || submitting} className="gap-2">
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
-              Continue to Xero
-            </Button>
+
+            {hasAnyInput ? (
+              <Button onClick={onSubmit} disabled={!canContinue} className="gap-2" aria-busy={connecting || submitting}>
+                {(submitting || connecting) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+                {(submitting || connecting) ? "Connecting…" : "Continue to Xero"}
+              </Button>
+            ) : (
+              <div className="h-10" />
+            )}
           </div>
 
-          {/* RELATIVE preview (no host/port → no hydration mismatch) */}
           <div className="rounded-lg border p-3">
             <div className="mb-1 text-xs font-medium text-muted-foreground">Preview</div>
             <code className="block overflow-x-auto text-xs" suppressHydrationWarning>

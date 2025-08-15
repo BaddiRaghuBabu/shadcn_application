@@ -8,6 +8,7 @@ export async function GET() {
     const cfg = await getXeroSettings();
     return NextResponse.json({
       clientId: cfg.client_id,
+      clientSecret: cfg.client_secret,
       redirectUri: cfg.redirect_uri,
       scopes: cfg.scopes.join(" "),
       hasClientSecret: !!cfg.client_secret,
@@ -15,6 +16,7 @@ export async function GET() {
   } catch {
     return NextResponse.json({
       clientId: "",
+      clientSecret: "",
       redirectUri: "",
       scopes: "",
       hasClientSecret: false,

@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import NProgress from "nprogress";
+import "nprogress/nprogress.css";
+import { toast, Toaster } from "sonner";
 import { motion } from "framer-motion";
 import {
   CheckCircle2, XCircle, RefreshCw, PlugZap, Building2, Signal, Power, Link2,
@@ -23,29 +25,69 @@ type PlatformID = "xero" | "quickbooks" | "myob" | "sage";
 type ConnectionStatus = "connected" | "disconnected" | "expired" | "refreshing" | "error";
 
 interface PlatformMeta {
-  id: PlatformID; label: string; accent: string;
-  oauthUrl: string; statusUrl: string; refreshUrl: string; disconnectUrl: string; dashboardPath: string;
+  id: PlatformID;
+  label: string;
+  accent: string;
+  oauthUrl: string;
+  statusUrl: string;
+  refreshUrl: string;
+  disconnectUrl: string;
+  dashboardPath: string;
 }
 interface PlatformState {
-  status: ConnectionStatus; tenantName?: string | null; expiresAt?: string | null;
-  lastRefreshedAt?: string | null; error?: string | null;
+  status: ConnectionStatus;
+  tenantName?: string | null;
+  expiresAt?: string | null;
+  lastRefreshedAt?: string | null;
+  error?: string | null;
 }
 
 const PLATFORMS: PlatformMeta[] = [
-  { id: "xero", label: "Xero", accent: "from-sky-500 via-sky-400 to-sky-600",
-    oauthUrl: "/api/xero/connect", statusUrl: "/api/xero/status", refreshUrl: "/api/xero/refresh",
-    disconnectUrl: "/api/xero/disconnect", dashboardPath: "/xero-dashboard" },
-  { id: "quickbooks", label: "QuickBooks", accent: "from-emerald-500 via-emerald-400 to-emerald-600",
-    oauthUrl: "/api/quickbooks/connect", statusUrl: "/api/quickbooks/status", refreshUrl: "/api/quickbooks/refresh",
-    disconnectUrl: "/api/quickbooks/disconnect", dashboardPath: "/quickbooks" },
-  { id: "myob", label: "MYOB", accent: "from-fuchsia-500 via-fuchsia-400 to-fuchsia-600",
-    oauthUrl: "/api/myob/connect", statusUrl: "/api/myob/status", refreshUrl: "/api/myob/refresh",
-    disconnectUrl: "/api/myob/disconnect", dashboardPath: "/myob" },
-  { id: "sage", label: "Sage", accent: "from-lime-500 via-lime-400 to-lime-600",
-    oauthUrl: "/api/sage/connect", statusUrl: "/api/sage/status", refreshUrl: "/api/sage/refresh",
-    disconnectUrl: "/api/sage/disconnect", dashboardPath: "/sage" },
+  {
+    id: "xero",
+    label: "Xero",
+    accent: "from-sky-500 via-sky-400 to-sky-600",
+    oauthUrl: "/api/xero/connect",
+    statusUrl: "/api/xero/status",
+    refreshUrl: "/api/xero/refresh",
+    disconnectUrl: "/api/xero/disconnect",
+    dashboardPath: "/xero-dashboard",
+  },
+  {
+    id: "quickbooks",
+    label: "QuickBooks",
+    accent: "from-emerald-500 via-emerald-400 to-emerald-600",
+    oauthUrl: "/api/quickbooks/connect",
+    statusUrl: "/api/quickbooks/status",
+    refreshUrl: "/api/quickbooks/refresh",
+    disconnectUrl: "/api/quickbooks/disconnect",
+    dashboardPath: "/quickbooks",
+  },
+  {
+    id: "myob",
+    label: "MYOB",
+    accent: "from-fuchsia-500 via-fuchsia-400 to-fuchsia-600",
+    oauthUrl: "/api/myob/connect",
+    statusUrl: "/api/myob/status",
+    refreshUrl: "/api/myob/refresh",
+    disconnectUrl: "/api/myob/disconnect",
+    dashboardPath: "/myob",
+  },
+  {
+    id: "sage",
+    label: "Sage",
+    accent: "from-lime-500 via-lime-400 to-lime-600",
+    oauthUrl: "/api/sage/connect",
+    statusUrl: "/api/sage/status",
+    refreshUrl: "/api/sage/refresh",
+    disconnectUrl: "/api/sage/disconnect",
+    dashboardPath: "/sage",
+  },
 ];
+
 const SHORT_LABEL: Partial<Record<PlatformID, string>> = { quickbooks: "QuickBooks" };
+
+NProgress.configure({ showSpinner: false, trickleSpeed: 120, minimum: 0.08 });
 
 function msToCompact(ms: number) {
   if (!isFinite(ms)) return "—";
@@ -57,9 +99,13 @@ function msToCompact(ms: number) {
 function formatLocal(dt?: string | null) {
   if (!dt) return "—";
   const d = new Date(dt);
-  return d.toLocaleString(undefined, { year: "numeric", month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  return d.toLocaleString(undefined, {
+    year: "numeric", month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
+  });
 }
-function classNames(...xs: Array<string | false | null | undefined>) { return xs.filter(Boolean).join(" "); }
+function classNames(...xs: Array<string | false | null | undefined>) {
+  return xs.filter(Boolean).join(" ");
+}
 function useCountdown(expiresAt?: string | null) {
   const [now, setNow] = useState<number>(() => Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
@@ -72,19 +118,32 @@ async function fetchJSON<T>(url: string, opts?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 function normalizeTokenPayload(raw: any) {
-  const connected = typeof raw?.connected === "boolean" ? raw.connected : Boolean(raw?.expires_at ?? raw?.expiresAt ?? raw?.expires_in);
+  const connected =
+    typeof raw?.connected === "boolean"
+      ? raw.connected
+      : Boolean(raw?.expires_at ?? raw?.expiresAt ?? raw?.expires_in);
   const tenantName = raw?.tenantName ?? raw?.tenant_name ?? raw?.tenant ?? null;
-  const issuedAtISO: string | null = raw?.issuedAt ?? raw?.lastRefreshedAt ?? raw?.updated_at ?? raw?.created_at ?? null;
-  const expiresAtISO: string | null = raw?.expiresAt ?? raw?.expires_at ?? (typeof raw?.expires_in === "number" ? new Date(Date.now() + raw.expires_in * 1000).toISOString() : null);
+  const issuedAtISO: string | null =
+    raw?.issuedAt ?? raw?.lastRefreshedAt ?? raw?.updated_at ?? raw?.created_at ?? null;
+  const expiresAtISO: string | null =
+    raw?.expiresAt ??
+    raw?.expires_at ??
+    (typeof raw?.expires_in === "number" ? new Date(Date.now() + raw.expires_in * 1000).toISOString() : null);
   return { connected, tenantName, issuedAtISO, expiresAtISO };
 }
 
 function BrandLogo({ id, size = 28 }: { id: PlatformID; size?: number }) {
   const iconMap = { xero: siXero, quickbooks: siQuickbooks, myob: siMyob, sage: siSage } as const;
-  const icon = iconMap[id]; if (!icon) return null;
-  return (<svg role="img" aria-label={icon.title} width={size} height={size} viewBox="0 0 24 24" className="shrink-0">
-    <title>{icon.title}</title><path d={icon.path} fill={`#${icon.hex}`} /></svg>);
+  const icon = iconMap[id];
+  if (!icon) return null;
+  return (
+    <svg role="img" aria-label={icon.title} width={size} height={size} viewBox="0 0 24 24" className="shrink-0">
+      <title>{icon.title}</title>
+      <path d={icon.path} fill={`#${icon.hex}`} />
+    </svg>
+  );
 }
+
 function StatusPill({ status }: { status: ConnectionStatus }) {
   const map: Record<ConnectionStatus, { text: string; className: string }> = {
     connected: { text: "Connected", className: "bg-emerald-500/15 text-emerald-600" },
@@ -94,12 +153,30 @@ function StatusPill({ status }: { status: ConnectionStatus }) {
     error: { text: "Error", className: "bg-rose-500/15 text-rose-600" },
   };
   const cfg = map[status];
-  return <Badge className={classNames("rounded-full px-2 py-0.5 text-[10px] leading-none whitespace-nowrap shrink-0", cfg.className)}>{cfg.text}</Badge>;
+  return (
+    <Badge className={classNames("rounded-full px-2 py-0.5 text-[10px] leading-none whitespace-nowrap shrink-0", cfg.className)}>
+      {cfg.text}
+    </Badge>
+  );
 }
 
 function PlatformCard({
-  meta, state, onConnect, onRefresh, onDisconnect, onOpen,
-}: { meta: PlatformMeta; state: PlatformState; onConnect: () => void; onRefresh: () => void; onDisconnect: () => void; onOpen: () => void; }) {
+  meta,
+  state,
+  disabled = false,
+  onConnect,
+  onRefresh,
+  onDisconnect,
+  onOpen,
+}: {
+  meta: PlatformMeta;
+  state: PlatformState;
+  disabled?: boolean;
+  onConnect: () => void;
+  onRefresh: () => void;
+  onDisconnect: () => void;
+  onOpen: () => void;
+}) {
   const { expired, label, msLeft } = useCountdown(state.expiresAt);
   const hasTenant = Boolean(state.tenantName && state.tenantName.trim().length);
   const isTimingStatus = state.status === "connected" || state.status === "refreshing" || state.status === "expired";
@@ -161,7 +238,9 @@ function PlatformCard({
               {state.lastRefreshedAt && (
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Signal className="h-4 w-4 shrink-0" />
-                  <div className="min-w-0">Last refreshed: <span className="text-foreground">{formatLocal(state.lastRefreshedAt)}</span></div>
+                  <div className="min-w-0">
+                    Last refreshed: <span className="text-foreground">{formatLocal(state.lastRefreshedAt)}</span>
+                  </div>
                 </div>
               )}
               {state.error && (
@@ -179,18 +258,30 @@ function PlatformCard({
         <CardFooter className="pt-2">
           {isConnected ? (
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="link" size="sm" className="h-7 px-1 text-xs font-medium whitespace-nowrap" onClick={onRefresh} disabled={state.status === "refreshing"}>
+              <Button
+                variant="link"
+                size="sm"
+                className="h-7 px-1 text-xs font-medium whitespace-nowrap"
+                onClick={onRefresh}
+                disabled={disabled || state.status === "refreshing"}
+              >
                 <RefreshCw className="mr-1 h-3.5 w-3.5" /> Refresh token
               </Button>
-              <Button variant="link" size="sm" className="h-7 px-1 text-xs font-medium whitespace-nowrap" onClick={onOpen}>
+              <Button variant="link" size="sm" className="h-7 px-1 text-xs font-medium whitespace-nowrap" onClick={onOpen} disabled={disabled}>
                 <ExternalLink className="mr-1 h-3.5 w-3.5" /> Open dashboard
               </Button>
-              <Button variant="link" size="sm" className="h-7 px-1 text-xs font-medium text-rose-600 hover:text-rose-700 whitespace-nowrap" onClick={onDisconnect}>
+              <Button
+                variant="link"
+                size="sm"
+                className="h-7 px-1 text-xs font-medium text-rose-600 hover:text-rose-700 whitespace-nowrap"
+                onClick={onDisconnect}
+                disabled={disabled}
+              >
                 <Power className="mr-1 h-3.5 w-3.5" /> Disconnect
               </Button>
             </div>
           ) : (
-            <Button size="sm" onClick={onConnect} className="h-7 px-2 text-xs font-medium whitespace-nowrap">
+            <Button size="sm" onClick={onConnect} className="h-7 px-2 text-xs font-medium whitespace-nowrap" disabled={disabled}>
               <Link2 className="mr-2 h-4 w-4" /> Connect {meta.label}
             </Button>
           )}
@@ -203,9 +294,40 @@ function PlatformCard({
 export default function AccountingConnectionsPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const busyRef = useRef(0); // supports overlapping actions
   const [states, setStates] = useState<Record<PlatformID, PlatformState>>({
-    xero: { status: "disconnected" }, quickbooks: { status: "disconnected" }, myob: { status: "disconnected" }, sage: { status: "disconnected" },
+    xero: { status: "disconnected" },
+    quickbooks: { status: "disconnected" },
+    myob: { status: "disconnected" },
+    sage: { status: "disconnected" },
   });
+
+  // NProgress helpers
+  const startBusy = () => {
+    busyRef.current += 1;
+    if (busyRef.current === 1) {
+      NProgress.start();
+      setLoading(true);
+    }
+  };
+  const endBusy = () => {
+    busyRef.current = Math.max(0, busyRef.current - 1);
+    if (busyRef.current === 0) {
+      NProgress.done();
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    // NProgress bar style
+    const style = document.createElement("style");
+    style.innerHTML = `
+      #nprogress .bar{background:#2563eb;height:3px;}
+      #nprogress .peg{box-shadow:0 0 10px #2563eb,0 0 5px #2563eb;}
+    `;
+    document.head.appendChild(style);
+    return () => { document.head.removeChild(style); };
+  }, []);
 
   useEffect(() => {
     const sp = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
@@ -239,60 +361,114 @@ export default function AccountingConnectionsPage() {
   }
 
   async function refresh(meta: PlatformMeta) {
+    startBusy();
+    toast.message(`${meta.label}: refreshing token…`);
     setStates((prev) => ({ ...prev, [meta.id]: { ...prev[meta.id], status: "refreshing" } }));
-    setLoading(true);
     try {
       const raw = await fetchJSON<any>(meta.refreshUrl, { method: "POST" });
       const n = normalizeTokenPayload(raw);
       const hasTenant = Boolean(n.tenantName && String(n.tenantName).trim().length);
       if (!hasTenant) {
         toast.error(`${meta.label} refresh succeeded but no tenant found`);
-        setStates((prev) => ({ ...prev, [meta.id]: { status: "disconnected", tenantName: null, expiresAt: null, lastRefreshedAt: n.issuedAtISO ?? new Date().toISOString(), error: "No tenant selected" } }));
-        return;
+        setStates((prev) => ({
+          ...prev,
+          [meta.id]: {
+            status: "disconnected",
+            tenantName: null,
+            expiresAt: null,
+            lastRefreshedAt: n.issuedAtISO ?? new Date().toISOString(),
+            error: "No tenant selected",
+          },
+        }));
+      } else {
+        toast.success(`${meta.label} token refreshed`);
+        setStates((prev) => ({
+          ...prev,
+          [meta.id]: {
+            status: "connected",
+            tenantName: n.tenantName,
+            expiresAt: n.expiresAtISO ?? prev[meta.id]?.expiresAt ?? null,
+            lastRefreshedAt: n.issuedAtISO ?? new Date().toISOString(),
+            error: null,
+          },
+        }));
       }
-      toast.success(`${meta.label} token refreshed`);
-      setStates((prev) => ({ ...prev, [meta.id]: { status: "connected", tenantName: n.tenantName, expiresAt: n.expiresAtISO ?? prev[meta.id]?.expiresAt ?? null, lastRefreshedAt: n.issuedAtISO ?? new Date().toISOString(), error: null } }));
     } catch (e: any) {
-      toast.error(`${meta.label} refresh failed`);
+      toast.error(`${meta.label} refresh failed: ${e?.message ?? "Unknown error"}`);
       setStates((prev) => ({ ...prev, [meta.id]: { ...prev[meta.id], status: "error", error: e?.message ?? "Failed" } }));
     } finally {
-      setLoading(false);
+      endBusy();
     }
   }
 
   async function disconnect(meta: PlatformMeta) {
-    setLoading(true);
+    startBusy();
+    toast.message(`${meta.label}: disconnecting…`);
     try {
       await fetchJSON<any>(meta.disconnectUrl, { method: "POST" });
       toast.success(`${meta.label} disconnected`);
       setStates((prev) => ({ ...prev, [meta.id]: { status: "disconnected" } }));
     } catch (e: any) {
-      toast.error(`${meta.label} disconnect failed`);
+      toast.error(`${meta.label} disconnect failed: ${e?.message ?? "Unknown error"}`);
       setStates((prev) => ({ ...prev, [meta.id]: { ...prev[meta.id], status: "error", error: e?.message ?? "Failed" } }));
     } finally {
-      setLoading(false);
+      endBusy();
     }
   }
 
   function connect(meta: PlatformMeta) {
-    if (meta.id === "xero") { router.push("connection-xero/api-key-connect"); return; }
-    window.location.href = meta.oauthUrl;
+    startBusy();
+    toast.message(`Redirecting to ${meta.label}…`);
+    // small delay so the top bar paints before navigation
+    setTimeout(() => {
+      if (meta.id === "xero") {
+        // go through your Xero page first
+        router.push("connection-xero/api-key-connect");
+      } else {
+        // external/other flows
+        window.location.assign(meta.oauthUrl);
+      }
+      // NOTE: do not call endBusy(); page will unload or route will change
+    }, 150);
   }
-  function openDashboard(meta: PlatformMeta) { router.push(meta.dashboardPath); }
+
+  function openDashboard(meta: PlatformMeta) {
+    startBusy();
+    toast.message(`Opening ${meta.label} dashboard…`);
+    setTimeout(() => {
+      router.push(meta.dashboardPath);
+      // do not endBusy(); navigation will replace the page
+    }, 120);
+  }
 
   async function hydrateAll() {
-    setLoading(true);
-    await Promise.all(PLATFORMS.map((p) => loadStatus(p)));
-    setLoading(false);
+    startBusy();
+    toast.message("Checking connections…");
+    try {
+      await Promise.all(PLATFORMS.map((p) => loadStatus(p)));
+      toast.success("Status updated");
+    } finally {
+      endBusy();
+    }
   }
 
-  useEffect(() => { hydrateAll(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    hydrateAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const disconnected = PLATFORMS.filter((p) => states[p.id].status === "disconnected");
   const connected = PLATFORMS.filter((p) => states[p.id].status !== "disconnected");
 
   return (
-    <div className="mx-auto max-w-6xl p-4 md:p-8">
+    <div className="mx-auto max-w-6xl p-4 md:p-8" aria-busy={loading}>
+      {/* NProgress styling */}
+      <style jsx global>{`
+        #nprogress .bar { background:#2563eb; height:3px; }
+        #nprogress .peg { box-shadow:0 0 10px #2563eb, 0 0 5px #2563eb; }
+      `}</style>
+      <Toaster position="bottom-right" richColors closeButton />
+
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Accounting Connections</h1>
@@ -304,13 +480,13 @@ export default function AccountingConnectionsPage() {
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="h-7 px-2 text-xs">
+              <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={loading}>
                 <PlugZap className="mr-2 h-4 w-4" /> Quick actions
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               {PLATFORMS.map((p) => (
-                <DropdownMenuItem key={p.id} onClick={() => connect(p)}>
+                <DropdownMenuItem key={p.id} onClick={() => connect(p)} disabled={loading}>
                   <Link2 className="mr-2 h-4 w-4" /> Connect {p.label}
                 </DropdownMenuItem>
               ))}
@@ -330,7 +506,16 @@ export default function AccountingConnectionsPage() {
         ) : (
           <div className="grid grid-cols-1 auto-rows-[1fr] gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {disconnected.map((meta) => (
-              <PlatformCard key={meta.id} meta={meta} state={states[meta.id]} onConnect={() => connect(meta)} onRefresh={() => refresh(meta)} onDisconnect={() => disconnect(meta)} onOpen={() => openDashboard(meta)} />
+              <PlatformCard
+                key={meta.id}
+                meta={meta}
+                state={states[meta.id]}
+                disabled={loading}
+                onConnect={() => connect(meta)}
+                onRefresh={() => refresh(meta)}
+                onDisconnect={() => disconnect(meta)}
+                onOpen={() => openDashboard(meta)}
+              />
             ))}
           </div>
         )}
@@ -344,11 +529,22 @@ export default function AccountingConnectionsPage() {
           <h2 className="text-sm font-semibold uppercase text-muted-foreground">Connected</h2>
         </div>
         {connected.length === 0 ? (
-          <div className="rounded-xl border bg-muted/30 p-6 text-sm text-muted-foreground">No platforms connected. Use the buttons above to connect Xero, QuickBooks, MYOB, or Sage.</div>
+          <div className="rounded-xl border bg-muted/30 p-6 text-sm text-muted-foreground">
+            No platforms connected. Use the buttons above to connect Xero, QuickBooks, MYOB, or Sage.
+          </div>
         ) : (
           <div className="grid grid-cols-1 auto-rows-[1fr] gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {connected.map((meta) => (
-              <PlatformCard key={meta.id} meta={meta} state={states[meta.id]} onConnect={() => connect(meta)} onRefresh={() => refresh(meta)} onDisconnect={() => disconnect(meta)} onOpen={() => openDashboard(meta)} />
+              <PlatformCard
+                key={meta.id}
+                meta={meta}
+                state={states[meta.id]}
+                disabled={loading}
+                onConnect={() => connect(meta)}
+                onRefresh={() => refresh(meta)}
+                onDisconnect={() => disconnect(meta)}
+                onOpen={() => openDashboard(meta)}
+              />
             ))}
           </div>
         )}
