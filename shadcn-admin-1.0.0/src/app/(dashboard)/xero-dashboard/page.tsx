@@ -20,12 +20,9 @@ import {
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabaseClient";
-import { cn } from "@/lib/utils";
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 
 // ---------------- types ----------------
 interface XeroStatus {
@@ -216,7 +213,7 @@ export default function XeroHubPage() {
           <Button variant="outline" onClick={() => router.push("/connection-xero")}>
             {statusLoading ? (
               <span className="flex items-center gap-2"><CalendarClock className="h-4 w-4 animate-pulse" /> Checking…</span>
-            ) : status?.connected ? (
+            ) : status?.tenantName ? (
               <span className="flex items-center gap-2 text-emerald-600"><ShieldCheck className="h-4 w-4" /> Connected</span>
             ) : (
               <span className="flex items-center gap-2 text-destructive"><CircleAlert className="h-4 w-4" /> Not connected</span>

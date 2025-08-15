@@ -174,7 +174,7 @@ export default function ApiKeyConnectPage() {
     <div className="mx-auto w-full max-w-none p-4 md:p-8">
       {/* NProgress styling tweaks */}
       <style jsx global>{`
-        #nprogress .bar { background: #2563eb; height: 3px; }
+        #nprogress .bar { background: #2563eb; height: 1px; }
         #nprogress .peg { box-shadow: 0 0 10px #2563eb, 0 0 5px #2563eb; }
       `}</style>
 
