@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getSupabaseAdminClient } from "@/lib/supabaseClient";
+import { getXeroSettings } from "@/lib/xeroService";
 
 /**
  * Manual token exchange callback (with PKCE support):
@@ -11,11 +13,11 @@ import { NextRequest, NextResponse } from "next/server";
  */
 
 function clearTempCookies(res: NextResponse) {
-  const opts = { path: "/", maxAge: 0 };
-  res.cookies.set("xero_oauth_state", "", opts as any);
-  res.cookies.set("xero_pkce_verifier", "", opts as any);
-  res.cookies.set("xero_client_id", "", opts as any);
-  res.cookies.set("xero_redirect_uri", "", opts as any);
+ const opts: { path: string; maxAge: number } = { path: "/", maxAge: 0 };
+  res.cookies.set("xero_oauth_state", "", opts);
+  res.cookies.set("xero_pkce_verifier", "", opts);
+  res.cookies.set("xero_client_id", "", opts);
+  res.cookies.set("xero_redirect_uri", "", opts);
 }
 
 export async function GET(req: NextRequest) {
@@ -37,10 +39,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL(`/connection-xero?error=state_mismatch`, url.origin));
   }
 
-  // Load config (cookies first, env fallback)
-  const clientId = req.cookies.get("xero_client_id")?.value || process.env.XERO_CLIENT_ID!;
-  const redirectUri = req.cookies.get("xero_redirect_uri")?.value || process.env.XERO_REDIRECT_URI!;
-  const clientSecret = process.env.XERO_CLIENT_SECRET || ""; // confidential web app only
+  // Load config (cookies first, Supabase fallback)
+  const cfg = await getXeroSettings();
+  const clientId = req.cookies.get("xero_client_id")?.value || cfg.client_id;
+  const redirectUri = req.cookies.get("xero_redirect_uri")?.value || cfg.redirect_uri;
+  const clientSecret = cfg.client_secret; // confidential web app only
   const codeVerifier = req.cookies.get("xero_pkce_verifier")?.value || ""; // PKCE
 
   if (!clientId || !redirectUri) {
@@ -97,12 +100,19 @@ export async function GET(req: NextRequest) {
     clearTempCookies(noTenant);
     return noTenant;
   }
-
-  // TODO: persist tokens + chosen.tenantId in your DB (server-side only).
-  // Example:
-  // const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
-  // await db.upsertXeroTokens({ tenantId: chosen.tenantId, accessToken: tokens.access_token, refreshToken: tokens.refresh_token, expiresAt });
-
+  // Persist tokens + tenant ID in Supabase
+  const supabase = getSupabaseAdminClient();
+  const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
+  await supabase
+    .from("xero_tokens")
+    .upsert({
+      tenant_id: chosen.tenantId,
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token ?? null,
+      expires_at: expiresAt,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "tenant_id" });
+    
   const ok = NextResponse.redirect(new URL(`/connection-xero?connected=1`, url.origin));
   clearTempCookies(ok);
   return ok;

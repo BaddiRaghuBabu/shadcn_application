@@ -1,14 +1,19 @@
 // app/api/xero/status/route.ts
 import { NextResponse } from "next/server";
-import { xero } from "@/lib/xeroService";
+import { getXeroClient, getXeroSettings } from "@/lib/xeroService";
+import type { XeroClient } from "xero-node";
 import { getSupabaseAdminClient } from "@/lib/supabaseClient";
 
 export async function GET() {
-  const clientConfigured = Boolean(
-    process.env.XERO_CLIENT_ID &&
-      process.env.XERO_CLIENT_SECRET &&
-      process.env.XERO_REDIRECT_URI
-  );
+  let clientConfigured = false;
+  let xero: XeroClient | null = null;
+  try {
+    const cfg = await getXeroSettings();
+    clientConfigured = Boolean(cfg?.client_id && cfg?.client_secret && cfg?.redirect_uri);
+    xero = await getXeroClient();
+  } catch {
+    clientConfigured = false;
+  }
 
   const supabase = getSupabaseAdminClient();
   const { data: token } = await supabase
@@ -21,16 +26,18 @@ export async function GET() {
     return NextResponse.json({ connected: false, clientConfigured });
   }
 
-  xero.setTokenSet({
-    access_token: token.access_token,
-    refresh_token: token.refresh_token,
-  });
+  if (xero) {
+    xero.setTokenSet({
+      access_token: token.access_token,
+      refresh_token: token.refresh_token,
+    });
+  }
 
   let tenantName: string | null = null;
   let environment: "sandbox" | "live" | undefined;
 
   try {
-    const tenants = await xero.updateTenants();
+    const tenants = await xero?.updateTenants();
     const tenant = tenants
       ?.sort((a, b) => {
         const aDate = new Date(a.updatedDateUtc ?? a.createdDateUtc ?? 0);

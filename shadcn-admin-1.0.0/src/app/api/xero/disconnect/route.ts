@@ -1,7 +1,7 @@
 // src/app/api/xero/disconnect/route.ts
 import { NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/supabaseClient"
-import { xero } from "@/lib/xeroService"
+import { getXeroClient } from "@/lib/xeroService"
 
 export async function POST() {
   const TAG = "[Xero] Disconnect"
@@ -9,6 +9,7 @@ export async function POST() {
   console.log(`${TAG} → POST /api/xero/disconnect started`)
 
   const supabase = getSupabaseAdminClient()
+  const xero = await getXeroClient()
 
   // 1) Fetch stored tokens
   const { data: token, error: tokenErr } = await supabase

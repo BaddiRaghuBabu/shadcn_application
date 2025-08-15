@@ -1,7 +1,7 @@
 // \app\api\xero\ping
 import { NextResponse } from "next/server"
 import { getSupabaseAdminClient } from "@/lib/supabaseClient"
-import { xero } from "@/lib/xeroService"
+import { getXeroClient } from "@/lib/xeroService"
 
 function maskToken(t?: string | null, keep = 4) {
   if (!t) return "null"
@@ -44,6 +44,8 @@ export async function GET() {
   }
 
   console.log("[/api/xero/ping] Setting token set on Xero SDK…")
+  const xero = await getXeroClient();
+
   xero.setTokenSet({
     access_token: token.access_token,
     refresh_token: token.refresh_token,

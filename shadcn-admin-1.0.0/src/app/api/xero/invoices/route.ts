@@ -1,6 +1,6 @@
 // /app/api/xero/invoices/route.ts
 import { NextResponse } from "next/server";
-import { xero } from "@/lib/xeroService";
+import { getXeroClient } from "@/lib/xeroService";
 import { getSupabaseAdminClient } from "@/lib/supabaseClient";
 
 function iso(d?: string | null): string | null {
@@ -43,6 +43,7 @@ export async function GET() {
     if (!token) {
       return NextResponse.json({ error: "Not connected" }, { status: 401 });
     }
+    const xero = await getXeroClient();
 
     xero.setTokenSet({
       access_token: token.access_token,

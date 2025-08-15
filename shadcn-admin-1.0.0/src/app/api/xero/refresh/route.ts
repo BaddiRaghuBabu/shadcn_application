@@ -1,7 +1,7 @@
 // app/api/xero/refresh/route.ts
 import { NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/supabaseClient";
-import { xero } from "@/lib/xeroService";
+import { getXeroClient, getXeroSettings } from "@/lib/xeroService";
 
 /**
  * Robust refresh endpoint:
@@ -36,10 +36,7 @@ function isTokenSet(v: unknown): v is XeroTokenSet {
 }
 
 async function refreshViaSdk(refresh_token: string) {
-  // Some xero-node versions keep the token set internally
-  // and expose refreshToken() + readTokenSet()
-  // We seed it with the refresh_token we have.
-  
+  const xero = await getXeroClient();
   xero.setTokenSet({ refresh_token });
 
   try {
@@ -64,17 +61,14 @@ async function refreshViaSdk(refresh_token: string) {
 }
 
 async function refreshDirect(refresh_token: string) {
-  const cid = process.env.XERO_CLIENT_ID;
-  const secret = process.env.XERO_CLIENT_SECRET;
-  if (!cid || !secret) {
-    throw new Error("XERO_CLIENT_ID / XERO_CLIENT_SECRET missing");
-  }
+  const cfg = await getXeroSettings();
+
 
   const body = new URLSearchParams();
   body.set("grant_type", "refresh_token");
   body.set("refresh_token", refresh_token);
-  body.set("client_id", cid);
-  body.set("client_secret", secret);
+  body.set("client_id", cfg.client_id);
+  body.set("client_secret", cfg.client_secret);
 
   const res = await fetch("https://identity.xero.com/connect/token", {
     method: "POST",

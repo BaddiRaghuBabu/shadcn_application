@@ -34,7 +34,7 @@ interface PlatformState {
 const PLATFORMS: PlatformMeta[] = [
   { id: "xero", label: "Xero", accent: "from-sky-500 via-sky-400 to-sky-600",
     oauthUrl: "/api/xero/connect", statusUrl: "/api/xero/status", refreshUrl: "/api/xero/refresh",
-    disconnectUrl: "/api/xero/disconnect", dashboardPath: "/xero" },
+    disconnectUrl: "/api/xero/disconnect", dashboardPath: "/xero-dashboard" },
   { id: "quickbooks", label: "QuickBooks", accent: "from-emerald-500 via-emerald-400 to-emerald-600",
     oauthUrl: "/api/quickbooks/connect", statusUrl: "/api/quickbooks/status", refreshUrl: "/api/quickbooks/refresh",
     disconnectUrl: "/api/quickbooks/disconnect", dashboardPath: "/quickbooks" },

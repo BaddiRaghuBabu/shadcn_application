@@ -61,18 +61,15 @@ function CopyBtn({ value, label }: { value: string; label: string }) {
 }
 
 /** Build a RELATIVE preview URL so SSR and client match exactly */
-function buildRelativePreview(values: Pick<XeroConfig, "clientId" | "redirectUri" | "scopes">) {
-  const params = new URLSearchParams();
-  if (values.clientId) params.set("client_id", values.clientId);
-  if (values.redirectUri) params.set("redirect_uri", values.redirectUri as string);
-  if (values.scopes) params.set("scopes", values.scopes);
-  const qs = params.toString();
-  return `/api/xero/connect${qs ? `?${qs}` : ""}`;
+function buildRelativePreview() {
+  return "/api/xero/connect";
 }
 
 export default function ApiKeyConnectPage() {
   const router = useRouter();
   const [reveal, setReveal] = useState(false);
+  const [hasSecret, setHasSecret] = useState(false);
+
 
   const form = useForm<XeroConfig>({
     resolver: zodResolver(XeroConfigSchema),
@@ -87,13 +84,24 @@ export default function ApiKeyConnectPage() {
     mode: "onChange",
   });
 
-  // Optional convenience: prefill from window.origin AFTER mount (inputs are fine).
+  // Prefill from origin and load existing settings
   useEffect(() => {
     const origin = typeof window !== "undefined" ? window.location.origin : "";
     if (origin) {
-      if (!form.getValues("applicationUrl")) form.setValue("applicationUrl", origin, { shouldDirty: true });
-      if (!form.getValues("redirectUri")) form.setValue("redirectUri", `${origin}/api/xero/callback`, { shouldDirty: true });
+      if (!form.getValues("applicationUrl"))
+        form.setValue("applicationUrl", origin, { shouldDirty: true });
+      if (!form.getValues("redirectUri"))
+        form.setValue("redirectUri", `${origin}/api/xero/callback`, { shouldDirty: true });
     }
+      fetch("/api/xero/settings")
+      .then((res) => res.json())
+      .then((cfg) => {
+        if (cfg.clientId) form.setValue("clientId", cfg.clientId);
+        if (cfg.redirectUri) form.setValue("redirectUri", cfg.redirectUri);
+        if (cfg.scopes) form.setValue("scopes", cfg.scopes);
+        setHasSecret(Boolean(cfg.hasClientSecret));
+      })
+      .catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -101,22 +109,26 @@ export default function ApiKeyConnectPage() {
 
   // No POST — we just redirect with query to /api/xero/connect
   const onSubmit = form.handleSubmit(async (values) => {
-    const url = new URL("/api/xero/connect", window.location.origin);
-    url.searchParams.set("client_id", values.clientId);
-    if (values.redirectUri) url.searchParams.set("redirect_uri", values.redirectUri);
-    url.searchParams.set("scopes", values.scopes);
-    window.location.href = url.toString();
+ try {
+      const res = await fetch("/api/xero/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId: values.clientId,
+          clientSecret: values.clientSecret || undefined,
+          redirectUri: values.redirectUri,
+          scopes: values.scopes,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      window.location.href = "/api/xero/connect";
+    } catch {
+      toast.error("Failed to save settings");
+    }
   });
 
-  // Build a RELATIVE preview string (no host/port → no hydration diff)
-  const previewHref = useMemo(() => {
-    const v = form.getValues();
-    return buildRelativePreview({
-      clientId: v.clientId,
-      redirectUri: v.redirectUri,
-      scopes: v.scopes,
-    });
-  }, [form]);
+  const previewHref = useMemo(() => buildRelativePreview(), []);
+
 
   return (
     <div className="mx-auto w-full max-w-none p-4 md:p-8">
@@ -127,17 +139,15 @@ export default function ApiKeyConnectPage() {
         </Button>
 
         <div className="flex items-center gap-2">
-          <Badge variant="outline" className="text-[11px]">Config-less mode</Badge>
-        </div>
+          <Badge variant="outline" className="text-[11px]">Secure mode</Badge>        
+          </div>
       </div>
 
       <Card className="border-muted">
         <CardHeader>
           <CardTitle>Connect Xero — Step 1: API Credentials</CardTitle>
           <CardDescription>
-            We’ll send <strong>only</strong> Client ID, Redirect URI, and Scopes to{" "}
-            <code>/api/xero/connect</code>. Keep your Client Secret on the server as{" "}
-            <code>XERO_CLIENT_SECRET</code>.
+            Store credentials in Supabase. Client Secret never leaves the server.
           </CardDescription>
         </CardHeader>
 
@@ -194,7 +204,7 @@ export default function ApiKeyConnectPage() {
               <Input
                 id="clientSecret"
                 type={reveal ? "text" : "password"}
-                placeholder="•••••••••••••••"
+                placeholder={hasSecret ? "•••••••••••••••" : ""}
                 {...form.register("clientSecret")}
               />
               <Button
@@ -210,7 +220,7 @@ export default function ApiKeyConnectPage() {
             </div>
             <div className="flex items-start gap-2 text-[12px] text-amber-700">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5" />
-              <span>Store this on the server as <code>XERO_CLIENT_SECRET</code>. This field is for your reference only.</span>
+              <span>Leave blank to keep existing secret. It is stored server-side.</span>
             </div>
           </div>
 

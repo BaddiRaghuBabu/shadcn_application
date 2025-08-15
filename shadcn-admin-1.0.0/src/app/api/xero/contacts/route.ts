@@ -2,7 +2,7 @@
 // app/api/xero/contacts/route.ts
 import { NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/supabaseClient";
-import { xero } from "@/lib/xeroService";
+import { getXeroClient } from "@/lib/xeroService";
 
 function iso(d?: string | null): string | null {
   if (!d) return null;
@@ -45,6 +45,7 @@ export async function GET() {
 
     console.log("[Xero] Tenant:", token.tenant_id);
     console.log("[Xero] Access token present?", Boolean(token.access_token));
+    const xero = await getXeroClient();
 
     xero.setTokenSet({
       access_token: token.access_token,

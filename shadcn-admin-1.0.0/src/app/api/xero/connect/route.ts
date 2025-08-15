@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
+import { getXeroSettings } from "@/lib/xeroService";
 
 /**
  * Builds the consent URL (supports dynamic query overrides):
@@ -33,14 +34,17 @@ export async function GET(req: NextRequest) {
 
   try {
     const scopesFromQuery = url.searchParams.get("scopes");
+    const cfg = await getXeroSettings();
     const defaultScopes =
-      process.env.XERO_SCOPES ??
+          cfg.scopes?.join(" ") ||
+
       "openid profile email offline_access accounting.contacts accounting.transactions accounting.settings";
     const scopes = scopesFromQuery ?? defaultScopes;
 
     // client/redirect: query > env
-    const clientId = url.searchParams.get("client_id") ?? process.env.XERO_CLIENT_ID ?? "";
-    const redirectUri = url.searchParams.get("redirect_uri") ?? process.env.XERO_REDIRECT_URI ?? "";
+     // client/redirect: query > db
+    const clientId = url.searchParams.get("client_id") ?? cfg.client_id;
+    const redirectUri = url.searchParams.get("redirect_uri") ?? cfg.redirect_uri;
 
     console.log("[/api/xero/connect] Using:", {
       clientId: mask(clientId),
