@@ -1,14 +1,14 @@
-// app/api/xero/refresh/route.ts
-import { NextResponse } from "next/server";
+// src/app/api/xero/refresh/route.ts
+import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/supabaseClient";
 import { getXeroClient, getXeroSettings } from "@/lib/xeroService";
 
 /**
  * Robust refresh endpoint:
  * 1) Tries Xero SDK's refreshToken()
- * 2) Falls back to a direct POST to Xero's token endpoint (handles SDK/version quirks)
+ * 2) Falls back to a direct POST to Xero's token endpoint
  * 3) Stores rotated refresh_token and new access_token in `xero_tokens`
- * 4) Returns a stable shape the UI understands: { expires_at } (+expires_in for countdown)
+ * 4) Returns a stable shape the UI understands: { connected, expires_at, expires_in }
  */
 
 type TokenRow = {
@@ -21,7 +21,7 @@ type XeroTokenSet = {
   access_token?: string;
   refresh_token?: string;
   expires_in?: number;
-  expires_at?: string;
+  expires_at?: string | number;
   token_type?: string;
   scope?: string;
   [k: string]: unknown;
@@ -30,39 +30,54 @@ type XeroTokenSet = {
 function isoIn(seconds: number) {
   return new Date(Date.now() + seconds * 1000).toISOString();
 }
+function isObj(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null;
+}
+function getStr(o: Record<string, unknown>, key: string): string | undefined {
+  const v = o[key];
+  return typeof v === "string" ? v : undefined;
+}
+function getNum(o: Record<string, unknown>, key: string): number | undefined {
+  const v = o[key];
+  return typeof v === "number" && Number.isFinite(v) ? v : undefined;
+}
+function errMsg(e: unknown): string {
+  return e instanceof Error ? e.message : typeof e === "string" ? e : "Refresh failed";
+}
+function authishStatusFromMessage(msg: string): number {
+  const t = msg.toLowerCase();
+  if (t.includes("invalid_grant") || t.includes("unauthorized") || t.includes("expired") || t.includes("invalid_client")) {
+    return 401;
+  }
+  return 500;
+}
 
 function isTokenSet(v: unknown): v is XeroTokenSet {
-  return !!v && typeof v === "object";
+  return isObj(v);
 }
 
 async function refreshViaSdk(refresh_token: string) {
   const xero = await getXeroClient();
   xero.setTokenSet({ refresh_token });
 
-  try {
-    const tsUnknown = await xero.refreshToken();
-    const curUnknown = xero.readTokenSet?.();
+  const tsUnknown = await xero.refreshToken();
+  const curUnknown = xero.readTokenSet?.();
 
-    const ts = (isTokenSet(tsUnknown) ? tsUnknown : {}) as XeroTokenSet;
-    const cur = (isTokenSet(curUnknown) ? curUnknown : {}) as XeroTokenSet;
+  const ts = isTokenSet(tsUnknown) ? tsUnknown : {};
+  const cur = isTokenSet(curUnknown) ? curUnknown : {};
 
-    const access_token = ts.access_token ?? cur.access_token;
-    const rotated_refresh = ts.refresh_token ?? cur.refresh_token;
-    const expires_in = typeof ts.expires_in === "number" ? ts.expires_in : 1800;
+  const access_token = ts.access_token ?? cur.access_token;
+  const rotated_refresh = ts.refresh_token ?? cur.refresh_token;
+  const expires_in = typeof ts.expires_in === "number" ? ts.expires_in : 1800;
 
-    if (!access_token || !rotated_refresh) {
-      throw new Error("SDK refresh returned no tokens");
-    }
-    return { access_token, refresh_token: rotated_refresh, expires_in };
-  } catch (e) {
-    // Surface for fallback
-    throw e;
+  if (!access_token || !rotated_refresh) {
+    throw new Error("SDK refresh returned no tokens");
   }
+  return { access_token, refresh_token: rotated_refresh, expires_in };
 }
 
 async function refreshDirect(refresh_token: string) {
   const cfg = await getXeroSettings();
-
 
   const body = new URLSearchParams();
   body.set("grant_type", "refresh_token");
@@ -76,19 +91,28 @@ async function refreshDirect(refresh_token: string) {
     body: body.toString(),
   });
 
-  const json = (await res.json()) as XeroTokenSet;
-
-  if (!res.ok) {
-    const hint =
-      (json && (json as any).error_description) ||
-      (json && (json as any).Detail) ||
-      JSON.stringify(json);
-    throw new Error(`Refresh HTTP ${res.status}: ${hint}`);
+  let json: unknown = null;
+  try {
+    json = await res.json();
+  } catch {
+    // ignore parse failure; handled below
   }
 
-  const access_token = json.access_token;
-  const rotated_refresh = json.refresh_token;
-  const expires_in = typeof json.expires_in === "number" ? json.expires_in : 1800;
+  if (!res.ok) {
+    let hint = `HTTP ${res.status}`;
+    if (isObj(json)) {
+      hint =
+        getStr(json, "error_description") ??
+        getStr(json, "Detail") ??
+        JSON.stringify(json);
+    }
+    throw new Error(`Refresh ${hint}`);
+  }
+
+  const data = isObj(json) ? json : {};
+  const access_token = getStr(data, "access_token");
+  const rotated_refresh = getStr(data, "refresh_token");
+  const expires_in = getNum(data, "expires_in") ?? 1800;
 
   if (!access_token || !rotated_refresh) {
     throw new Error("Refresh response missing tokens");
@@ -96,44 +120,49 @@ async function refreshDirect(refresh_token: string) {
   return { access_token, refresh_token: rotated_refresh, expires_in };
 }
 
-export async function POST() {
+export async function POST(req: NextRequest) {
+  const startedAt = Date.now();
+  const debug = new URL(req.url).searchParams.get("debug") === "1";
+  const dbg: string[] = [];
+
   const supabase = getSupabaseAdminClient();
 
-  // 1) Load latest token row (in case multiple exist)
+  // 1) Load latest token row (if multiple exist)
   const { data: row, error: rowErr } = await supabase
     .from("xero_tokens")
     .select("tenant_id, access_token, refresh_token")
     .order("updated_at", { ascending: false })
     .limit(1)
-    .single<TokenRow>();
+    .maybeSingle<TokenRow>();
 
   if (rowErr || !row) {
-    console.error("[Xero Refresh] DB read failed:", rowErr);
-    return NextResponse.json(
-      { error: rowErr?.message || "Not connected" },
-      { status: 400 }
+    const res = NextResponse.json(
+      { error: rowErr?.message || "Not connected", ...(debug ? { debug: dbg } : {}) },
+      { status: 400 },
     );
+    res.headers.set("x-runtime-ms", String(Date.now() - startedAt));
+    return res;
   }
   if (!row.refresh_token) {
-    return NextResponse.json(
-      { error: "No refresh_token stored. Please reconnect Xero." },
-      { status: 401 }
+    const res = NextResponse.json(
+      { error: "No refresh_token stored. Please reconnect Xero.", ...(debug ? { debug: dbg } : {}) },
+      { status: 401 },
     );
+    res.headers.set("x-runtime-ms", String(Date.now() - startedAt));
+    return res;
   }
 
   try {
-    console.log("[Xero Refresh] Starting refresh for tenant:", row.tenant_id);
-
     // 2) Try SDK first; if it throws, fall back to direct HTTP
     let refreshed: { access_token: string; refresh_token: string; expires_in: number };
 
     try {
       refreshed = await refreshViaSdk(row.refresh_token);
-      console.log("[Xero Refresh] SDK refresh succeeded");
-    } catch (sdkErr) {
-      console.warn("[Xero Refresh] SDK refresh failed, falling back:", (sdkErr as Error)?.message);
+      if (debug) dbg.push("SDK refresh succeeded");
+    } catch (sdkErr: unknown) {
+      if (debug) dbg.push(`SDK refresh failed: ${errMsg(sdkErr)}; trying direct refresh`);
       refreshed = await refreshDirect(row.refresh_token);
-      console.log("[Xero Refresh] Direct refresh succeeded");
+      if (debug) dbg.push("Direct refresh succeeded");
     }
 
     const expires_at = isoIn(refreshed.expires_in);
@@ -150,42 +179,36 @@ export async function POST() {
       .eq("tenant_id", row.tenant_id);
 
     if (upErr) {
-      console.error("[Xero Refresh] DB update failed:", upErr);
-      return NextResponse.json(
-        { error: `DB update failed: ${upErr.message}` },
-        { status: 500 }
+      const res = NextResponse.json(
+        { error: `DB update failed: ${upErr.message}`, ...(debug ? { debug: dbg } : {}) },
+        { status: 500 },
       );
+      res.headers.set("x-runtime-ms", String(Date.now() - startedAt));
+      return res;
     }
 
-    console.log("[Xero Refresh] Saved new tokens. Expires at", expires_at);
-
-    // 4) Return a shape the UI normalizer understands
-    return NextResponse.json({
-      connected: true,
-      expires_at,
-      expires_in: refreshed.expires_in,
-    });
-  } catch (err: any) {
-    const msg = err?.message || "Refresh failed";
-    console.error("[Xero Refresh] Error:", msg, err?.response?.body || err);
-    // Map common auth errors to 401 for clearer UI
-    const text = String(msg);
-    const status =
-      text.includes("invalid_grant") || text.includes("expired") || text.includes("unauthorized")
-        ? 401
-        : text.includes("invalid_client")
-        ? 401
-        : 500;
-
-    return NextResponse.json(
+    // 4) Return stable shape
+    const res = NextResponse.json(
+      { connected: true, expires_at, expires_in: refreshed.expires_in, ...(debug ? { debug: dbg } : {}) },
+      { status: 200 },
+    );
+    res.headers.set("x-runtime-ms", String(Date.now() - startedAt));
+    return res;
+  } catch (err: unknown) {
+    const msg = errMsg(err);
+    const status = authishStatusFromMessage(msg);
+    const res = NextResponse.json(
       {
         error:
           status === 401
             ? "Refresh failed: auth invalid/expired. Please reconnect Xero."
-            : "Refresh failed. See server logs.",
+            : "Refresh failed.",
         detail: msg,
+        ...(debug ? { debug: dbg } : {}),
       },
-      { status }
+      { status },
     );
+    res.headers.set("x-runtime-ms", String(Date.now() - startedAt));
+    return res;
   }
 }

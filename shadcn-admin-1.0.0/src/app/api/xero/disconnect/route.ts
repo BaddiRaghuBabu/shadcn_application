@@ -1,85 +1,94 @@
 // src/app/api/xero/disconnect/route.ts
-import { NextResponse } from "next/server";
-import { getSupabaseAdminClient } from "@/lib/supabaseClient"
-import { getXeroClient } from "@/lib/xeroService"
+import { NextRequest, NextResponse } from "next/server";
+import { getSupabaseAdminClient } from "@/lib/supabaseClient";
+import { getXeroClient } from "@/lib/xeroService";
 
-export async function POST() {
-  const TAG = "[Xero] Disconnect"
-  const startedAt = Date.now()
-  console.log(`${TAG} → POST /api/xero/disconnect started`)
+type DebugLine = string;
 
-  const supabase = getSupabaseAdminClient()
-  const xero = await getXeroClient()
+function errMsg(e: unknown): string {
+  return e instanceof Error ? e.message : typeof e === "string" ? e : "Unexpected error";
+}
+
+export async function POST(req: NextRequest) {
+  const startedAt = Date.now();
+  const dbg: DebugLine[] = [];
+  const debug = new URL(req.url).searchParams.get("debug") === "1";
+
+  const supabase = getSupabaseAdminClient();
+  const xero = await getXeroClient();
 
   // 1) Fetch stored tokens
   const { data: token, error: tokenErr } = await supabase
     .from("xero_tokens")
     .select("tenant_id, access_token, refresh_token")
-    .single()
+    .single();
 
   if (tokenErr) {
-    console.error(`${TAG} Failed to read xero_tokens:`, tokenErr)
+    dbg.push(`read xero_tokens error: ${errMsg(tokenErr)}`);
   }
 
   if (!token) {
-    console.warn(`${TAG} No token found. Not connected.`)
-    console.log(`${TAG} ← finished in ${Date.now() - startedAt}ms`)
-    return NextResponse.json({ error: "Not connected" }, { status: 400 })
+    const res = NextResponse.json({ error: "Not connected", ...(debug ? { debug: dbg } : {}) }, { status: 400 });
+    res.headers.set("x-runtime-ms", String(Date.now() - startedAt));
+    return res;
   }
 
-  console.log(
-    `${TAG} Loaded token for tenant: ${token.tenant_id}. ` +
-      `access_token? ${Boolean(token.access_token)} refresh_token? ${Boolean(token.refresh_token)}`
-  )
+  dbg.push(
+    `loaded tenant=${token.tenant_id}, access=${Boolean(token.access_token)}, refresh=${Boolean(token.refresh_token)}`,
+  );
 
   // 2) Prime SDK with tokenSet
   try {
     xero.setTokenSet({
-      access_token: token.access_token,
-      refresh_token: token.refresh_token,
-    })
-    console.log(`${TAG} setTokenSet OK`)
-  } catch (e) {
-    console.error(`${TAG} setTokenSet failed:`, e)
+      access_token: token.access_token as string,
+      refresh_token: token.refresh_token as string,
+    });
+    dbg.push("setTokenSet OK");
+  } catch (e: unknown) {
+    dbg.push(`setTokenSet failed: ${errMsg(e)}`);
   }
 
   // 3) Try disconnecting tenant
   try {
-    console.log(`${TAG} Disconnecting tenant ${token.tenant_id}…`)
-    await xero.disconnect(token.tenant_id);
-    console.log(`${TAG} Disconnect OK for tenant ${token.tenant_id}`)
-  } catch (e) {
-    console.error(`${TAG} Disconnect failed (will continue):`, e)
+    dbg.push(`disconnecting tenant ${token.tenant_id}…`);
+    await xero.disconnect(token.tenant_id as string);
+    dbg.push(`disconnect OK for tenant ${token.tenant_id}`);
+  } catch (e: unknown) {
+    dbg.push(`disconnect failed (continuing): ${errMsg(e)}`);
   }
 
   // 4) Try revoking token
   try {
-    console.log(`${TAG} Revoking token…`)
+    dbg.push("revoking token…");
     await xero.revokeToken();
-    console.log(`${TAG} Revoke token OK`)
-  } catch (e) {
-    console.error(`${TAG} Revoke token failed (will continue):`, e)
+    dbg.push("revoke token OK");
+  } catch (e: unknown) {
+    dbg.push(`revoke token failed (continuing): ${errMsg(e)}`);
   }
 
   // 5) Remove from DB
+  let deletedCount = 0;
   try {
     const { data: delRows, error: delErr } = await supabase
       .from("xero_tokens")
       .delete()
-      .eq("tenant_id", token.tenant_id)
-      .select("tenant_id"); // return deleted rows for logging
+      .eq("tenant_id", token.tenant_id as string)
+      .select("tenant_id"); // return deleted rows for introspection
 
     if (delErr) {
-      console.error(`${TAG} DB delete failed:`, delErr)
+      dbg.push(`DB delete failed: ${errMsg(delErr)}`);
     } else {
-      console.log(
-        `${TAG} DB delete OK. Removed ${Array.isArray(delRows) ? delRows.length : 0} row(s) for tenant ${token.tenant_id}`
-      )
+      deletedCount = Array.isArray(delRows) ? delRows.length : 0;
+      dbg.push(`DB delete OK: removed ${deletedCount} row(s) for tenant ${token.tenant_id}`);
     }
-  } catch (e) {
-    console.error(`${TAG} Unexpected error while deleting DB row:`, e)
+  } catch (e: unknown) {
+    dbg.push(`unexpected DB delete error: ${errMsg(e)}`);
   }
 
-  console.log(`${TAG} ← finished in ${Date.now() - startedAt}ms`)
-  return NextResponse.json({ success: true })
+  const res = NextResponse.json(
+    { success: true, removed: deletedCount, ...(debug ? { debug: dbg } : {}) },
+    { status: 200 },
+  );
+  res.headers.set("x-runtime-ms", String(Date.now() - startedAt));
+  return res;
 }

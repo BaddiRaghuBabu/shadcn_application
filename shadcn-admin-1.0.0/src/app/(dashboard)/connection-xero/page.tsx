@@ -1,3 +1,4 @@
+// app/(dashboard)/connection-xero/page.tsx
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -7,20 +8,29 @@ import "nprogress/nprogress.css";
 import { toast, Toaster } from "sonner";
 import { motion } from "framer-motion";
 import {
-  CheckCircle2, XCircle, RefreshCw, PlugZap, Building2, Signal, Power, Link2,
-  TimerReset, ShieldCheck, ExternalLink, Clock4,
+  CheckCircle2,
+  XCircle,
+  RefreshCw,
+  PlugZap,
+  Building2,
+  Signal,
+  Power,
+  Link2,
+  TimerReset,
+  ShieldCheck,
+  ExternalLink,
+  Clock4,
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 import { siXero, siQuickbooks, siMyob, siSage } from "simple-icons";
 
+// ---------------- types ----------------
 type PlatformID = "xero" | "quickbooks" | "myob" | "sage";
 type ConnectionStatus = "connected" | "disconnected" | "expired" | "refreshing" | "error";
 
@@ -34,6 +44,7 @@ interface PlatformMeta {
   disconnectUrl: string;
   dashboardPath: string;
 }
+
 interface PlatformState {
   status: ConnectionStatus;
   tenantName?: string | null;
@@ -42,6 +53,14 @@ interface PlatformState {
   error?: string | null;
 }
 
+type NormalizedToken = {
+  connected: boolean;
+  tenantName: string | null;
+  issuedAtISO: string | null;
+  expiresAtISO: string | null;
+};
+
+// ---------------- data ----------------
 const PLATFORMS: PlatformMeta[] = [
   {
     id: "xero",
@@ -89,10 +108,32 @@ const SHORT_LABEL: Partial<Record<PlatformID, string>> = { quickbooks: "QuickBoo
 
 NProgress.configure({ showSpinner: false, trickleSpeed: 120, minimum: 0.08 });
 
+// ---------------- utils ----------------
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null;
+}
+function getString(v: unknown): string | null {
+  return typeof v === "string" ? v : null;
+}
+function getNumber(v: unknown): number | null {
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+function getBool(v: unknown): boolean | null {
+  return typeof v === "boolean" ? v : null;
+}
+function errorMessage(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (typeof e === "string") return e;
+  return "Unknown error";
+}
+
 function msToCompact(ms: number) {
   if (!isFinite(ms)) return "—";
-  const neg = ms < 0, abs = Math.abs(ms);
-  const s = Math.floor(abs / 1000) % 60, m = Math.floor(abs / (1000 * 60)) % 60, h = Math.floor(abs / (1000 * 60 * 60));
+  const neg = ms < 0,
+    abs = Math.abs(ms);
+  const s = Math.floor(abs / 1000) % 60,
+    m = Math.floor(abs / (1000 * 60)) % 60,
+    h = Math.floor(abs / (1000 * 60 * 60));
   const pad = (n: number) => n.toString().padStart(2, "0");
   return (neg ? "-" : "") + `${pad(h)}:${pad(m)}:${pad(s)}`;
 }
@@ -100,7 +141,12 @@ function formatLocal(dt?: string | null) {
   if (!dt) return "—";
   const d = new Date(dt);
   return d.toLocaleString(undefined, {
-    year: "numeric", month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
   });
 }
 function classNames(...xs: Array<string | false | null | undefined>) {
@@ -108,30 +154,48 @@ function classNames(...xs: Array<string | false | null | undefined>) {
 }
 function useCountdown(expiresAt?: string | null) {
   const [now, setNow] = useState<number>(() => Date.now());
-  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
   const msLeft = useMemo(() => (!expiresAt ? NaN : new Date(expiresAt).getTime() - now), [expiresAt, now]);
   return { expired: Number.isFinite(msLeft) ? msLeft <= 0 : false, label: Number.isFinite(msLeft) ? msToCompact(msLeft) : "—", msLeft };
 }
+
 async function fetchJSON<T>(url: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(url, opts);
   if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
   return res.json() as Promise<T>;
 }
-function normalizeTokenPayload(raw: any) {
+async function fetchOK(url: string, opts?: RequestInit): Promise<void> {
+  const res = await fetch(url, opts);
+  if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
+}
+
+function normalizeTokenPayload(raw: unknown): NormalizedToken {
+  const r = isRecord(raw) ? (raw as Record<string, unknown>) : {};
   const connected =
-    typeof raw?.connected === "boolean"
-      ? raw.connected
-      : Boolean(raw?.expires_at ?? raw?.expiresAt ?? raw?.expires_in);
-  const tenantName = raw?.tenantName ?? raw?.tenant_name ?? raw?.tenant ?? null;
-  const issuedAtISO: string | null =
-    raw?.issuedAt ?? raw?.lastRefreshedAt ?? raw?.updated_at ?? raw?.created_at ?? null;
-  const expiresAtISO: string | null =
-    raw?.expiresAt ??
-    raw?.expires_at ??
-    (typeof raw?.expires_in === "number" ? new Date(Date.now() + raw.expires_in * 1000).toISOString() : null);
+    getBool(r.connected) ?? Boolean(getString(r.expires_at) ?? getString(r.expiresAt) ?? getNumber(r.expires_in));
+
+  const tenantName = getString(r.tenantName) ?? getString(r.tenant_name) ?? getString(r.tenant) ?? null;
+
+  const issuedAtISO =
+    getString(r.issuedAt) ??
+    getString(r.lastRefreshedAt) ??
+    getString(r.updated_at) ??
+    getString(r.created_at) ??
+    null;
+
+  const expiresIn = getNumber(r.expires_in);
+  const expiresAtISO =
+    getString(r.expiresAt) ??
+    getString(r.expires_at) ??
+    (expiresIn !== null ? new Date(Date.now() + expiresIn * 1000).toISOString() : null);
+
   return { connected, tenantName, issuedAtISO, expiresAtISO };
 }
 
+// ---------------- UI bits ----------------
 function BrandLogo({ id, size = 28 }: { id: PlatformID; size?: number }) {
   const iconMap = { xero: siXero, quickbooks: siQuickbooks, myob: siMyob, sage: siSage } as const;
   const icon = iconMap[id];
@@ -153,11 +217,7 @@ function StatusPill({ status }: { status: ConnectionStatus }) {
     error: { text: "Error", className: "bg-rose-500/15 text-rose-600" },
   };
   const cfg = map[status];
-  return (
-    <Badge className={classNames("rounded-full px-2 py-0.5 text-[10px] leading-none whitespace-nowrap shrink-0", cfg.className)}>
-      {cfg.text}
-    </Badge>
-  );
+  return <Badge className={classNames("rounded-full px-2 py-0.5 text-[10px] leading-none whitespace-nowrap shrink-0", cfg.className)}>{cfg.text}</Badge>;
 }
 
 function PlatformCard({
@@ -258,13 +318,7 @@ function PlatformCard({
         <CardFooter className="pt-2">
           {isConnected ? (
             <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="link"
-                size="sm"
-                className="h-7 px-1 text-xs font-medium whitespace-nowrap"
-                onClick={onRefresh}
-                disabled={disabled || state.status === "refreshing"}
-              >
+              <Button variant="link" size="sm" className="h-7 px-1 text-xs font-medium whitespace-nowrap" onClick={onRefresh} disabled={disabled || state.status === "refreshing"}>
                 <RefreshCw className="mr-1 h-3.5 w-3.5" /> Refresh token
               </Button>
               <Button variant="link" size="sm" className="h-7 px-1 text-xs font-medium whitespace-nowrap" onClick={onOpen} disabled={disabled}>
@@ -291,6 +345,7 @@ function PlatformCard({
   );
 }
 
+// ---------------- page ----------------
 export default function AccountingConnectionsPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -326,7 +381,9 @@ export default function AccountingConnectionsPage() {
       #nprogress .peg{box-shadow:0 0 10px #2563eb,0 0 5px #2563eb;}
     `;
     document.head.appendChild(style);
-    return () => { document.head.removeChild(style); };
+    return () => {
+      document.head.removeChild(style);
+    };
   }, []);
 
   useEffect(() => {
@@ -337,7 +394,7 @@ export default function AccountingConnectionsPage() {
 
   async function loadStatus(meta: PlatformMeta) {
     try {
-      const raw = await fetchJSON<any>(meta.statusUrl);
+      const raw = await fetchJSON<unknown>(meta.statusUrl);
       const n = normalizeTokenPayload(raw);
       if (n.connected) {
         const hasTenant = Boolean(n.tenantName && String(n.tenantName).trim().length);
@@ -347,7 +404,7 @@ export default function AccountingConnectionsPage() {
           [meta.id]: {
             status: hasTenant ? (expired ? "expired" : "connected") : "disconnected",
             tenantName: hasTenant ? n.tenantName : null,
-            expiresAt: hasTenant ? (n.expiresAtISO ?? null) : null,
+            expiresAt: hasTenant ? n.expiresAtISO ?? null : null,
             lastRefreshedAt: n.issuedAtISO ?? null,
             error: hasTenant ? null : "No tenant selected",
           },
@@ -355,8 +412,8 @@ export default function AccountingConnectionsPage() {
       } else {
         setStates((prev) => ({ ...prev, [meta.id]: { status: "disconnected" } }));
       }
-    } catch (e: any) {
-      setStates((prev) => ({ ...prev, [meta.id]: { status: "disconnected", error: e?.message ?? "Failed" } }));
+    } catch (e: unknown) {
+      setStates((prev) => ({ ...prev, [meta.id]: { status: "disconnected", error: errorMessage(e) } }));
     }
   }
 
@@ -365,7 +422,7 @@ export default function AccountingConnectionsPage() {
     toast.message(`${meta.label}: refreshing token…`);
     setStates((prev) => ({ ...prev, [meta.id]: { ...prev[meta.id], status: "refreshing" } }));
     try {
-      const raw = await fetchJSON<any>(meta.refreshUrl, { method: "POST" });
+      const raw = await fetchJSON<unknown>(meta.refreshUrl, { method: "POST" });
       const n = normalizeTokenPayload(raw);
       const hasTenant = Boolean(n.tenantName && String(n.tenantName).trim().length);
       if (!hasTenant) {
@@ -393,9 +450,9 @@ export default function AccountingConnectionsPage() {
           },
         }));
       }
-    } catch (e: any) {
-      toast.error(`${meta.label} refresh failed: ${e?.message ?? "Unknown error"}`);
-      setStates((prev) => ({ ...prev, [meta.id]: { ...prev[meta.id], status: "error", error: e?.message ?? "Failed" } }));
+    } catch (e: unknown) {
+      toast.error(`${meta.label} refresh failed: ${errorMessage(e)}`);
+      setStates((prev) => ({ ...prev, [meta.id]: { ...prev[meta.id], status: "error", error: errorMessage(e) } }));
     } finally {
       endBusy();
     }
@@ -405,12 +462,12 @@ export default function AccountingConnectionsPage() {
     startBusy();
     toast.message(`${meta.label}: disconnecting…`);
     try {
-      await fetchJSON<any>(meta.disconnectUrl, { method: "POST" });
+      await fetchOK(meta.disconnectUrl, { method: "POST" });
       toast.success(`${meta.label} disconnected`);
       setStates((prev) => ({ ...prev, [meta.id]: { status: "disconnected" } }));
-    } catch (e: any) {
-      toast.error(`${meta.label} disconnect failed: ${e?.message ?? "Unknown error"}`);
-      setStates((prev) => ({ ...prev, [meta.id]: { ...prev[meta.id], status: "error", error: e?.message ?? "Failed" } }));
+    } catch (e: unknown) {
+      toast.error(`${meta.label} disconnect failed: ${errorMessage(e)}`);
+      setStates((prev) => ({ ...prev, [meta.id]: { ...prev[meta.id], status: "error", error: errorMessage(e) } }));
     } finally {
       endBusy();
     }
@@ -419,11 +476,11 @@ export default function AccountingConnectionsPage() {
   function connect(meta: PlatformMeta) {
     startBusy();
     toast.message(`Redirecting to ${meta.label}…`);
-    // small delay so the top bar paints before navigation
     setTimeout(() => {
       if (meta.id === "xero") {
         // go through your Xero page first
-        router.push("connection-xero/api-key-connect");
+        // (use absolute to avoid accidental relative routing)
+        router.push("/connection-xero/api-key-connect");
       } else {
         // external/other flows
         window.location.assign(meta.oauthUrl);
@@ -453,7 +510,7 @@ export default function AccountingConnectionsPage() {
   }
 
   useEffect(() => {
-    hydrateAll();
+    void hydrateAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -464,8 +521,13 @@ export default function AccountingConnectionsPage() {
     <div className="mx-auto max-w-6xl p-4 md:p-8" aria-busy={loading}>
       {/* NProgress styling */}
       <style jsx global>{`
-        #nprogress .bar { background:#2563eb; height:3px; }
-        #nprogress .peg { box-shadow:0 0 10px #2563eb, 0 0 5px #2563eb; }
+        #nprogress .bar {
+          background: #2563eb;
+          height: 3px;
+        }
+        #nprogress .peg {
+          box-shadow: 0 0 10px #2563eb, 0 0 5px #2563eb;
+        }
       `}</style>
       <Toaster position="bottom-right" richColors closeButton />
 
