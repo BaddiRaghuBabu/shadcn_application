@@ -22,22 +22,26 @@ function clearTempCookies(res: NextResponse) {
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
+  const origin =req.headers.get("origin") || process.env.NEXT_PUBLIC_SITE_URL || url.origin;
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
   const error = url.searchParams.get("error");
 
   if (error) {
-    return NextResponse.redirect(new URL(`/connection-xero?error=${encodeURIComponent(error)}`, url.origin));
-  }
+    return NextResponse.redirect(
+      new URL(`/connection-xero?error=${encodeURIComponent(error)}`, origin)
+    );  }
   if (!code) {
-    return NextResponse.redirect(new URL(`/connection-xero?error=missing_code`, url.origin));
-  }
+    return NextResponse.redirect(
+      new URL(`/connection-xero?error=missing_code`, origin)
+    );  }
 
   // Validate anti-CSRF state if set
   const cookieState = req.cookies.get("xero_oauth_state")?.value;
   if (cookieState && state && cookieState !== state) {
-    return NextResponse.redirect(new URL(`/connection-xero?error=state_mismatch`, url.origin));
-  }
+    return NextResponse.redirect(
+      new URL(`/connection-xero?error=state_mismatch`, origin)
+    );  }
 
   // Load config (cookies first, Supabase fallback)
   const cfg = await getXeroSettings();
@@ -47,8 +51,9 @@ export async function GET(req: NextRequest) {
   const codeVerifier = req.cookies.get("xero_pkce_verifier")?.value || ""; // PKCE
 
   if (!clientId || !redirectUri) {
-    return NextResponse.redirect(new URL(`/connection-xero?error=missing_client_config`, url.origin));
-  }
+    return NextResponse.redirect(
+      new URL(`/connection-xero?error=missing_client_config`, origin)
+    );  }
 
   // Exchange the code → tokens
   const form = new URLSearchParams({
@@ -68,7 +73,12 @@ export async function GET(req: NextRequest) {
 
   if (!tokenRes.ok) {
     const txt = await tokenRes.text();
-    const fail = NextResponse.redirect(new URL(`/connection-xero?error=${encodeURIComponent(`token_exchange_failed: ${txt}`)}`, url.origin));
+    const fail = NextResponse.redirect(
+      new URL(
+        `/connection-xero?error=${encodeURIComponent(`token_exchange_failed: ${txt}`)}`,
+        origin
+      )
+    );
     clearTempCookies(fail);
     return fail;
   }
@@ -83,7 +93,12 @@ export async function GET(req: NextRequest) {
   });
   if (!connRes.ok) {
     const txt = await connRes.text();
-    const fail = NextResponse.redirect(new URL(`/connection-xero?error=${encodeURIComponent(`connections_failed: ${txt}`)}`, url.origin));
+    const fail = NextResponse.redirect(
+      new URL(
+        `/connection-xero?error=${encodeURIComponent(`connections_failed: ${txt}`)}`,
+        origin
+      )
+    ); 
     clearTempCookies(fail);
     return fail;
   }
@@ -96,7 +111,9 @@ export async function GET(req: NextRequest) {
   )[0];
 
   if (!chosen?.tenantId) {
-    const noTenant = NextResponse.redirect(new URL(`/connection-xero?error=no_tenant_found`, url.origin));
+    const noTenant = NextResponse.redirect(
+      new URL(`/connection-xero?error=no_tenant_found`, origin)
+    );
     clearTempCookies(noTenant);
     return noTenant;
   }
@@ -113,7 +130,9 @@ export async function GET(req: NextRequest) {
       updated_at: new Date().toISOString(),
     }, { onConflict: "tenant_id" });
     
-  const ok = NextResponse.redirect(new URL(`/connection-xero?connected=1`, url.origin));
+  const ok = NextResponse.redirect(
+    new URL(`/connection-xero?connected=1`, origin)
+  );
   clearTempCookies(ok);
   return ok;
 }
