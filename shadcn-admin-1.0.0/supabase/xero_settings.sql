@@ -4,6 +4,7 @@ create table if not exists xero_settings (
   client_id text not null,
   client_secret text not null,
   redirect_uri text not null,
+  application_url text not null,
   scopes text[] not null default '{}',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

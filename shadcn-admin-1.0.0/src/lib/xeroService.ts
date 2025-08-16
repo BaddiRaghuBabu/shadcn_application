@@ -7,6 +7,7 @@ export type XeroSettings = {
   client_id: string;
   client_secret: string;
   redirect_uri: string;
+  application_url: string;
   scopes: string[];
 };
 
@@ -19,21 +20,23 @@ export async function getXeroSettings(): Promise<XeroSettings> {
   const supabase = getSupabaseAdminClient();
   const { data } = await supabase
     .from("xero_settings")
-    .select("client_id, client_secret, redirect_uri, scopes")
+    .select("client_id, client_secret, redirect_uri, application_url, scopes")
     .eq("id", 1)
     .maybeSingle<XeroSettings>();
 
  
 
-  if (!data?.client_id || !data?.redirect_uri) {
-    throw new Error("Xero settings not configured");
+  if (!data?.client_id || !data?.redirect_uri || !data?.application_url) {
+      throw new Error("Xero settings not configured");
   }
   return {
     client_id: data.client_id,
     client_secret: data.client_secret,
     redirect_uri: data.redirect_uri,
+    application_url: data.application_url,
     scopes: data.scopes || [],
-  };}
+  };
+}
 
 /** Create a XeroClient using credentials from Supabase */
 export async function getXeroClient() {
