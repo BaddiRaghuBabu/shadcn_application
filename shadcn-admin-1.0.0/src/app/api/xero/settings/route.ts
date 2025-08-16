@@ -7,6 +7,7 @@ export async function GET() {
   try {
     const cfg = await getXeroSettings();
     return NextResponse.json({
+      applicationUrl: cfg.application_url,
       clientId: cfg.client_id,
       clientSecret: cfg.client_secret,
       redirectUri: cfg.redirect_uri,
@@ -15,6 +16,7 @@ export async function GET() {
     });
   } catch {
     return NextResponse.json({
+      applicationUrl: "",
       clientId: "",
       clientSecret: "",
       redirectUri: "",
@@ -31,6 +33,7 @@ export async function POST(req: NextRequest) {
 
   const updates: Record<string, unknown> = {
     id: 1,
+    application_url: body.applicationUrl,
     client_id: body.clientId,
     redirect_uri: body.redirectUri,
     scopes: String(body.scopes || "").split(" ").filter(Boolean),

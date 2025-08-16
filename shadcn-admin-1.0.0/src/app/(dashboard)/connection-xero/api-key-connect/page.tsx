@@ -104,6 +104,7 @@ export default function ApiKeyConnectPage() {
         if (cfg.clientId) form.setValue("clientId", cfg.clientId, { shouldDirty: true, shouldValidate: true });
         if (cfg.clientSecret) form.setValue("clientSecret", cfg.clientSecret, { shouldDirty: true, shouldValidate: true });
         if (cfg.redirectUri) form.setValue("redirectUri", cfg.redirectUri, { shouldDirty: true, shouldValidate: true });
+        if (cfg.applicationUrl)form.setValue("applicationUrl", cfg.applicationUrl, { shouldDirty: true, shouldValidate: true });
         if (cfg.scopes) form.setValue("scopes", cfg.scopes, { shouldDirty: true, shouldValidate: true });
       } catch {
         if (!navigator.onLine) toast.error("No internet connection");
@@ -127,6 +128,7 @@ export default function ApiKeyConnectPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          applicationUrl: values.applicationUrl,
           clientId: values.clientId,
           clientSecret: values.clientSecret,
           redirectUri: values.redirectUri,
