@@ -4,7 +4,6 @@ import { NextResponse } from "next/server"
 import { getSupabaseAdminClient } from "@/lib/supabaseClient"
 import { getQuickBooksApiBase } from "@/lib/quickbooksApi"
 
-
 export async function GET() {
   const reqId = Math.random().toString(36).slice(2)
   const now = new Date().toISOString()
@@ -17,7 +16,7 @@ export async function GET() {
     const { data: token, error: tokenErr } = await supabase
       .from("quickbooks_tokens")
       .select("realm_id, access_token")
-      .single()
+      .maybeSingle()
 
     if (tokenErr) {
       console.log(`[QBO][${reqId}] ERROR fetching token from DB:`, tokenErr)
@@ -55,7 +54,7 @@ export async function GET() {
     console.log(
       `[QBO][${reqId}] HTTP ${res.status} ${res.statusText} intuit_tid=${intuitTid ?? "n/a"}`
     )
-        if (res.status === 401 || res.status === 403) {
+     if (res.status === 401 || res.status === 403) {
       const txt = await res.text()
       console.log(`[QBO][${reqId}] Authorization error:`, txt)
       return NextResponse.json(
