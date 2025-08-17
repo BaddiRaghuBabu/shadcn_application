@@ -23,11 +23,18 @@ export async function GET() {
 
   const expiresAt = token.expires_at ?? null;
   const issuedAt = token.updated_at ?? token.created_at ?? null;
-  const expires_in = expiresAt ? Math.max(0, Math.round((new Date(expiresAt).getTime() - Date.now()) / 1000)) : undefined;
+const expires_in = expiresAt
+    ? Math.max(0, Math.round((new Date(expiresAt).getTime() - Date.now()) / 1000))
+    : undefined;
+
+  const tenantName = token.realm_id
+    ? `${token.realm_id}${token.company_name ? `: ${token.company_name}` : ""}`
+    : token.company_name ?? null;
 
   return NextResponse.json({
     connected: true,
-    tenantName: token.company_name ?? null,
+    tenantName,
+    realm_id: token.realm_id,    
     clientConfigured,
     expires_at: expiresAt,
     issuedAt,

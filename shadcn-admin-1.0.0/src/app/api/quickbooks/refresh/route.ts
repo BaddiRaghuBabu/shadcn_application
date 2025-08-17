@@ -10,7 +10,7 @@ export async function POST(_req: NextRequest) {
   const supabase = getSupabaseAdminClient();
   const { data: row, error: rowErr } = await supabase
     .from("quickbooks_tokens")
-    .select("realm_id, refresh_token")
+    .select("realm_id, refresh_token, company_name")
     .single();
 
   if (rowErr || !row) {
@@ -42,17 +42,30 @@ export async function POST(_req: NextRequest) {
       expires_in: number;
     };
     const expires_at = new Date(Date.now() + data.expires_in * 1000).toISOString();
+    const updatedAt = new Date().toISOString();
+
     await supabase
       .from("quickbooks_tokens")
       .update({
         access_token: data.access_token,
         refresh_token: data.refresh_token,
         expires_at,
-        updated_at: new Date().toISOString(),
+        updated_at: updatedAt,
       })
       .eq("realm_id", row.realm_id);
-    return NextResponse.json({ connected: true, expires_at, expires_in: data.expires_in });
-  } catch (e: unknown) {
+    const tenantName = row.realm_id
+      ? `${row.realm_id}${row.company_name ? `: ${row.company_name}` : ""}`
+      : row.company_name ?? null;
+    return NextResponse.json({
+      connected: true,
+      tenantName,
+      realm_id: row.realm_id,
+      expires_at,
+      issuedAt: updatedAt,
+      updated_at: updatedAt,
+      expires_in: data.expires_in,
+    });
+    } catch (e: unknown) {
     return NextResponse.json({ error: errMsg(e) }, { status: 500 });
   }
 }
