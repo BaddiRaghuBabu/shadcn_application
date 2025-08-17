@@ -210,7 +210,7 @@ export default function XeroHubPage() {
           <p className="text-sm text-muted-foreground">Quick modules for invoices, contacts, reporting and more.</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => router.push("/connection-xero")}>
+          <Button variant="outline" onClick={() => router.push("/connection")}>
             {statusLoading ? (
               <span className="flex items-center gap-2"><CalendarClock className="h-4 w-4 animate-pulse" /> Checking…</span>
             ) : status?.tenantName ? (

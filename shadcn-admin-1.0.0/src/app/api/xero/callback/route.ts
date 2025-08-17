@@ -29,19 +29,22 @@ export async function GET(req: NextRequest) {
 
   if (error) {
     return NextResponse.redirect(
-      new URL(`/connection?error=${encodeURIComponent(error)}`, origin)
-    );  }
+      new URL(`/connection?platform=xero&error=${encodeURIComponent(error)}`, origin)
+    );
+  }
   if (!code) {
     return NextResponse.redirect(
-      new URL(`/connection?error=missing_code`, origin)
-    );  }
+      new URL(`/connection?platform=xero&error=missing_code`, origin)
+    );
+  }
 
   // Validate anti-CSRF state if set
   const cookieState = req.cookies.get("xero_oauth_state")?.value;
   if (cookieState && state && cookieState !== state) {
     return NextResponse.redirect(
-      new URL(`/connection?error=state_mismatch`, origin)
-    );  }
+      new URL(`/connection?platform=xero&error=state_mismatch`, origin)
+    );
+  }
 
   // Load config (cookies first, Supabase fallback)
   const cfg = await getXeroSettings();
@@ -52,8 +55,9 @@ export async function GET(req: NextRequest) {
 
   if (!clientId || !redirectUri) {
     return NextResponse.redirect(
-      new URL(`/connection?error=missing_client_config`, origin)
-    );  }
+      new URL(`/connection?platform=xero&error=missing_client_config`, origin)
+    );
+  }
 
   // Exchange the code → tokens
   const form = new URLSearchParams({
@@ -75,7 +79,7 @@ export async function GET(req: NextRequest) {
     const txt = await tokenRes.text();
     const fail = NextResponse.redirect(
       new URL(
-        `/connection?error=${encodeURIComponent(`token_exchange_failed: ${txt}`)}`,
+            `/connection?platform=xero&error=${encodeURIComponent(`token_exchange_failed: ${txt}`)}`,
         origin
       )
     );
@@ -95,7 +99,7 @@ export async function GET(req: NextRequest) {
     const txt = await connRes.text();
     const fail = NextResponse.redirect(
       new URL(
-        `/connection?error=${encodeURIComponent(`connections_failed: ${txt}`)}`,
+        `/connection?platform=xero&error=${encodeURIComponent(`connections_failed: ${txt}`)}`,
         origin
       )
     ); 
@@ -112,7 +116,8 @@ export async function GET(req: NextRequest) {
 
   if (!chosen?.tenantId) {
     const noTenant = NextResponse.redirect(
-      new URL(`/connection?error=no_tenant_found`, origin)
+          new URL(`/connection?platform=xero&error=no_tenant_found`, origin)
+
     );
     clearTempCookies(noTenant);
     return noTenant;
@@ -131,7 +136,7 @@ export async function GET(req: NextRequest) {
     }, { onConflict: "tenant_id" });
     
   const ok = NextResponse.redirect(
-    new URL(`/connection?connected=1`, origin)
+    new URL(`/connection?connected=xero`, origin)
   );
   clearTempCookies(ok);
   return ok;

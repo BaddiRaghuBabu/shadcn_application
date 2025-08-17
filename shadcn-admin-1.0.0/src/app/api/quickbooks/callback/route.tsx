@@ -19,16 +19,19 @@ export async function GET(req: NextRequest) {
   const error = url.searchParams.get("error");
 
   if (error) {
-    return NextResponse.redirect(new URL(`/connection-xero?qb_error=${encodeURIComponent(error)}`, origin));
-  }
+    return NextResponse.redirect(
+      new URL(`/connection?platform=quickbooks&error=${encodeURIComponent(error)}`, origin)
+    );  }
   if (!code || !realmId) {
-    return NextResponse.redirect(new URL(`/connection-xero?qb_error=missing_code`, origin));
-  }
+    return NextResponse.redirect(
+      new URL(`/connection?platform=quickbooks&error=missing_code`, origin)
+    );  }
 
   const cookieState = req.cookies.get("qbo_oauth_state")?.value;
   if (cookieState && state && cookieState !== state) {
-    return NextResponse.redirect(new URL(`/connection-xero?qb_error=state_mismatch`, origin));
-  }
+    return NextResponse.redirect(
+      new URL(`/connection?platform=quickbooks&error=state_mismatch`, origin)
+    );  }
 
   const cfg = await getQuickBooksSettings();
   const clientId = req.cookies.get("qbo_client_id")?.value || cfg.client_id;
@@ -37,8 +40,9 @@ export async function GET(req: NextRequest) {
   const codeVerifier = req.cookies.get("qbo_pkce_verifier")?.value || "";
 
   if (!clientId || !redirectUri) {
-    return NextResponse.redirect(new URL(`/connection?qb_error=missing_client_config`, origin));
-  }
+    return NextResponse.redirect(
+      new URL(`/connection?platform=quickbooks&error=missing_client_config`, origin)
+    )  }
 
   const form = new URLSearchParams({
     grant_type: "authorization_code",
@@ -60,8 +64,12 @@ export async function GET(req: NextRequest) {
 
   if (!tokenRes.ok) {
     const txt = await tokenRes.text();
-    const fail = NextResponse.redirect(new URL(`/connection?qb_error=${encodeURIComponent(`token_failed:${txt}`)}`, origin));
-    clearTempCookies(fail);
+    const fail = NextResponse.redirect(
+      new URL(
+        `/connection?platform=quickbooks&error=${encodeURIComponent(`token_failed:${txt}`)}`,
+        origin
+      )
+    );    clearTempCookies(fail);
     return fail;
   }
 
@@ -96,7 +104,8 @@ export async function GET(req: NextRequest) {
     updated_at: new Date().toISOString(),
   }, { onConflict: "realm_id" });
 
-  const ok = NextResponse.redirect(new URL(`/connection?quickbooks=1`, origin));
-  clearTempCookies(ok);
+  const ok = NextResponse.redirect(
+    new URL(`/connection?connected=quickbooks`, origin)
+  );  clearTempCookies(ok);
   return ok;
 }

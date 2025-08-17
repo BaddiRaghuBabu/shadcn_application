@@ -387,11 +387,20 @@ export default function AccountingConnectionsPage() {
   }, []);
 
   useEffect(() => {
-    const sp = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
-    if (sp.get("connected") === "1") toast.success("Xero connected");
-    if (sp.get("error")) toast.error(`Xero: ${sp.get("error")}`);
-        if (sp.get("quickbooks") === "1") toast.success("QuickBooks connected");
-    if (sp.get("qb_error")) toast.error(`QuickBooks: ${sp.get("qb_error")}`);
+  const sp = new URLSearchParams(
+      typeof window !== "undefined" ? window.location.search : ""
+    );
+    const connected = sp.get("connected") as PlatformID | null;
+    if (connected) {
+      const label = SHORT_LABEL[connected] ?? PLATFORMS.find((p) => p.id === connected)?.label ?? connected;
+      toast.success(`${label} connected`);
+    }
+    const error = sp.get("error");
+    const platform = sp.get("platform") as PlatformID | null;
+    if (error && platform) {
+      const label = SHORT_LABEL[platform] ?? PLATFORMS.find((p) => p.id === platform)?.label ?? platform;
+      toast.error(`${label}: ${error}`);
+    }
   }, []);
 
   async function loadStatus(meta: PlatformMeta) {
