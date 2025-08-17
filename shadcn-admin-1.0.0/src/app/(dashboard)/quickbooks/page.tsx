@@ -62,12 +62,11 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-/* ----------------------- Types ----------------------- */
+/* ----------------------- Types (match Supabase schema) ----------------------- */
 
 interface Account {
   account_id: string;
   name: string | null;
-  fully_qualified_name: string | null;
   account_type: string | null;
   account_sub_type: string | null;
   current_balance: number | null;
@@ -77,9 +76,10 @@ interface Invoice {
   invoice_id: string;
   doc_number: string | null;
   customer_name: string | null;
-  total_amt: number | null;
-  balance: number | null;
+  status: string | null;
   currency_code: string | null;
+  balance: number | null;
+  total_amt: number | null;
 }
 
 /* ----------------------- Page ----------------------- */
@@ -96,19 +96,19 @@ export default function QuickBooksPage() {
     try {
       setLoadingA(true);
       NProgress.start();
-      const syncRes = await fetch("/api/quickbooks/accounts");
-      if (!syncRes.ok) {
-        const body = await syncRes.json().catch(() => ({}));
-        throw new Error(body.error || `HTTP ${syncRes.status}`);
-      }
-      const { data, error } = await supabase.from("quickbooks_accounts").select("*");
+      const { data, error } = await supabase
+        .from("quickbooks_accounts")
+        .select("account_id,name,account_type,account_sub_type,current_balance")
+        .order("updated_at", { ascending: false });
+
       if (error) throw error;
       const list = (data ?? []).map(sanitizeAccount);
       setAccounts(list);
       setLastSyncA(new Date());
       toast.success(`Accounts loaded: ${list.length}`);
     } catch (e) {
-      toast.error(`Accounts failed: ${e instanceof Error ? e.message : "Unknown error"}`);
+      const msg = e instanceof Error ? e.message : "Unknown error";
+      toast.error(`Accounts failed: ${msg}`);
     } finally {
       setLoadingA(false);
       NProgress.done();
@@ -119,19 +119,19 @@ export default function QuickBooksPage() {
     try {
       setLoadingI(true);
       NProgress.start();
-      const syncRes = await fetch("/api/quickbooks/invoices");
-      if (!syncRes.ok) {
-        const body = await syncRes.json().catch(() => ({}));
-        throw new Error(body.error || `HTTP ${syncRes.status}`);
-      }
-      const { data, error } = await supabase.from("quickbooks_invoices").select("*");
+      const { data, error } = await supabase
+        .from("quickbooks_invoices")
+        .select("invoice_id,doc_number,customer_name,status,currency_code,balance,total_amt")
+        .order("updated_at", { ascending: false });
+
       if (error) throw error;
       const list = (data ?? []).map(sanitizeInvoice);
       setInvoices(list);
       setLastSyncI(new Date());
       toast.success(`Invoices loaded: ${list.length}`);
     } catch (e) {
-      toast.error(`Invoices failed: ${e instanceof Error ? e.message : "Unknown error"}`);
+      const msg = e instanceof Error ? e.message : "Unknown error";
+      toast.error(`Invoices failed: ${msg}`);
     } finally {
       setLoadingI(false);
       NProgress.done();
@@ -158,7 +158,7 @@ export default function QuickBooksPage() {
             <div>
               <CardTitle className="text-xl">QuickBooks Dashboard</CardTitle>
               <CardDescription className="text-sm">
-                Accounts &amp; Invoices from your QuickBooks company
+                Accounts &amp; Invoices from your Supabase tables
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
@@ -207,7 +207,7 @@ export default function QuickBooksPage() {
               </TabsList>
               <div className="flex items-center gap-2">
                 <Badge variant="secondary" className="hidden sm:inline-flex">
-                  Company: QuickBooks
+                  Source: Supabase
                 </Badge>
               </div>
             </div>
@@ -242,19 +242,13 @@ function AccountsTable({
   const [subTypeFilter, setSubTypeFilter] = useState<string>("all");
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
     account_id: false,
-    fully_qualified_name: true,
   });
 
   const filteredData = useMemo(() => {
     let d = data;
-    // global text filter on name & full name
     if (globalFilter.trim()) {
       const q = globalFilter.toLowerCase();
-      d = d.filter(
-        (r) =>
-          (r.name ?? "").toLowerCase().includes(q) ||
-          (r.fully_qualified_name ?? "").toLowerCase().includes(q)
-      );
+      d = d.filter((r) => (r.name ?? "").toLowerCase().includes(q));
     }
     if (typeFilter !== "all") d = d.filter((r) => (r.account_type ?? "Unknown") === typeFilter);
     if (subTypeFilter !== "all") d = d.filter((r) => (r.account_sub_type ?? "Unknown") === subTypeFilter);
@@ -273,13 +267,6 @@ function AccountsTable({
         accessorKey: "name",
         header: ({ column }) => <HeaderSorter label="Name" column={column} />,
         cell: ({ row }) => <div className="font-medium">{row.original.name ?? "Unnamed"}</div>,
-      },
-      {
-        accessorKey: "fully_qualified_name",
-        header: "Full Name",
-        cell: ({ row }) => (
-          <span className="text-muted-foreground">{row.original.fully_qualified_name ?? "-"}</span>
-        ),
       },
       {
         accessorKey: "account_type",
@@ -320,18 +307,11 @@ function AccountsTable({
 
   const exportCSV = () => {
     const rows = table.getRowModel().rows.map((r) => r.original as Account);
-    const header = [
-      "name",
-      "fully_qualified_name",
-      "account_type",
-      "account_sub_type",
-      "current_balance",
-      "account_id",
-    ];
+    const header = ["name", "account_type", "account_sub_type", "current_balance", "account_id"];
     const csv = [
       header.join(","),
       ...rows.map((r) =>
-        [r.name ?? "", r.fully_qualified_name ?? "", r.account_type ?? "", r.account_sub_type ?? "", String(r.current_balance ?? 0), r.account_id]
+        [r.name ?? "", r.account_type ?? "", r.account_sub_type ?? "", String(r.current_balance ?? 0), r.account_id]
           .map(escapeCsv)
           .join(",")
       ),
@@ -344,7 +324,7 @@ function AccountsTable({
       {/* Toolbar */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex w-full items-center gap-2 md:w-auto">
-          <SearchBox value={globalFilter} onChange={setGlobalFilter} placeholder="Search name, full name..." />
+          <SearchBox value={globalFilter} onChange={setGlobalFilter} placeholder="Search account name..." />
           <Select value={typeFilter} onValueChange={setTypeFilter}>
             <SelectTrigger className="w-40">
               <SelectValue placeholder="Type" />
@@ -412,7 +392,6 @@ function InvoicesTable({
 
   const filteredData = useMemo(() => {
     let d = data;
-    // global text filter on invoice no & customer
     if (globalFilter.trim()) {
       const q = globalFilter.toLowerCase();
       d = d.filter(
@@ -420,8 +399,8 @@ function InvoicesTable({
       );
     }
     if (currencyFilter !== "all") d = d.filter((r) => (r.currency_code ?? "UNK") === currencyFilter);
-    if (statusFilter === "open") d = d.filter((r) => (r.balance ?? 0) > 0);
-    if (statusFilter === "paid") d = d.filter((r) => (r.balance ?? 0) <= 0);
+    if (statusFilter === "open") d = d.filter((r) => (r.balance ?? 0) > 0.0001);
+    if (statusFilter === "paid") d = d.filter((r) => (r.balance ?? 0) <= 0.0001);
     return d;
   }, [data, globalFilter, currencyFilter, statusFilter]);
 
@@ -466,6 +445,11 @@ function InvoicesTable({
         },
       },
       {
+        accessorKey: "status",
+        header: "Status",
+        cell: ({ row }) => <span className="uppercase">{row.original.status ?? "-"}</span>,
+      },
+      {
         accessorKey: "currency_code",
         header: "Currency",
         cell: ({ row }) => <span>{row.original.currency_code ?? "-"}</span>,
@@ -492,11 +476,19 @@ function InvoicesTable({
 
   const exportCSV = () => {
     const rows = table.getRowModel().rows.map((r) => r.original as Invoice);
-    const header = ["doc_number", "customer_name", "total_amt", "balance", "currency_code", "invoice_id"];
+    const header = ["doc_number", "customer_name", "total_amt", "balance", "status", "currency_code", "invoice_id"];
     const csv = [
       header.join(","),
       ...rows.map((r) =>
-        [r.doc_number ?? "", r.customer_name ?? "", String(r.total_amt ?? 0), String(r.balance ?? 0), r.currency_code ?? "", r.invoice_id]
+        [
+          r.doc_number ?? "",
+          r.customer_name ?? "",
+          String(r.total_amt ?? 0),
+          String(r.balance ?? 0),
+          r.status ?? "",
+          r.currency_code ?? "",
+          r.invoice_id,
+        ]
           .map(escapeCsv)
           .join(",")
       ),
@@ -763,10 +755,10 @@ function sanitizeAccount(a: Account): Account {
   return {
     account_id: String(a.account_id),
     name: a.name ?? null,
-    fully_qualified_name: a.fully_qualified_name ?? null,
     account_type: a.account_type ?? null,
     account_sub_type: a.account_sub_type ?? null,
-    current_balance: typeof a.current_balance === "number" ? a.current_balance : Number(a.current_balance ?? 0),
+    current_balance:
+      typeof a.current_balance === "number" ? a.current_balance : Number(a.current_balance ?? 0),
   };
 }
 
@@ -775,9 +767,10 @@ function sanitizeInvoice(i: Invoice): Invoice {
     invoice_id: String(i.invoice_id),
     doc_number: i.doc_number ?? null,
     customer_name: i.customer_name ?? null,
+    status: i.status ?? null,
+    currency_code: i.currency_code ?? null,
     total_amt: typeof i.total_amt === "number" ? i.total_amt : Number(i.total_amt ?? 0),
     balance: typeof i.balance === "number" ? i.balance : Number(i.balance ?? 0),
-    currency_code: i.currency_code ?? null,
   };
 }
 
