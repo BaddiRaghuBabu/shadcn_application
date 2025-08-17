@@ -77,8 +77,8 @@ export const sidebarData: SidebarData = {
           icon: IconUsers,
         },
         {
-          title: "connection-xero",
-          url: "/connection-xero",
+          title: "connection",
+          url: "/connection",
           icon: IconUsers,
         },
          {

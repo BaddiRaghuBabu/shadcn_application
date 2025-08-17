@@ -390,6 +390,8 @@ export default function AccountingConnectionsPage() {
     const sp = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
     if (sp.get("connected") === "1") toast.success("Xero connected");
     if (sp.get("error")) toast.error(`Xero: ${sp.get("error")}`);
+        if (sp.get("quickbooks") === "1") toast.success("QuickBooks connected");
+    if (sp.get("qb_error")) toast.error(`QuickBooks: ${sp.get("qb_error")}`);
   }, []);
 
   async function loadStatus(meta: PlatformMeta) {
@@ -480,7 +482,9 @@ export default function AccountingConnectionsPage() {
       if (meta.id === "xero") {
         // go through your Xero page first
         // (use absolute to avoid accidental relative routing)
-        router.push("/connection-xero/api-key-connect");
+        router.push("/connection/api-key-xero");
+      } else if (meta.id === "quickbooks") {
+        router.push("/connection/api-key-quickbooks");
       } else {
         // external/other flows
         window.location.assign(meta.oauthUrl);

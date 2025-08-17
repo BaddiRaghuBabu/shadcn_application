@@ -29,18 +29,18 @@ export async function GET(req: NextRequest) {
 
   if (error) {
     return NextResponse.redirect(
-      new URL(`/connection-xero?error=${encodeURIComponent(error)}`, origin)
+      new URL(`/connection?error=${encodeURIComponent(error)}`, origin)
     );  }
   if (!code) {
     return NextResponse.redirect(
-      new URL(`/connection-xero?error=missing_code`, origin)
+      new URL(`/connection?error=missing_code`, origin)
     );  }
 
   // Validate anti-CSRF state if set
   const cookieState = req.cookies.get("xero_oauth_state")?.value;
   if (cookieState && state && cookieState !== state) {
     return NextResponse.redirect(
-      new URL(`/connection-xero?error=state_mismatch`, origin)
+      new URL(`/connection?error=state_mismatch`, origin)
     );  }
 
   // Load config (cookies first, Supabase fallback)
@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
 
   if (!clientId || !redirectUri) {
     return NextResponse.redirect(
-      new URL(`/connection-xero?error=missing_client_config`, origin)
+      new URL(`/connection?error=missing_client_config`, origin)
     );  }
 
   // Exchange the code → tokens
@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
     const txt = await tokenRes.text();
     const fail = NextResponse.redirect(
       new URL(
-        `/connection-xero?error=${encodeURIComponent(`token_exchange_failed: ${txt}`)}`,
+        `/connection?error=${encodeURIComponent(`token_exchange_failed: ${txt}`)}`,
         origin
       )
     );
@@ -95,7 +95,7 @@ export async function GET(req: NextRequest) {
     const txt = await connRes.text();
     const fail = NextResponse.redirect(
       new URL(
-        `/connection-xero?error=${encodeURIComponent(`connections_failed: ${txt}`)}`,
+        `/connection?error=${encodeURIComponent(`connections_failed: ${txt}`)}`,
         origin
       )
     ); 
@@ -112,7 +112,7 @@ export async function GET(req: NextRequest) {
 
   if (!chosen?.tenantId) {
     const noTenant = NextResponse.redirect(
-      new URL(`/connection-xero?error=no_tenant_found`, origin)
+      new URL(`/connection?error=no_tenant_found`, origin)
     );
     clearTempCookies(noTenant);
     return noTenant;
@@ -131,7 +131,7 @@ export async function GET(req: NextRequest) {
     }, { onConflict: "tenant_id" });
     
   const ok = NextResponse.redirect(
-    new URL(`/connection-xero?connected=1`, origin)
+    new URL(`/connection?connected=1`, origin)
   );
   clearTempCookies(ok);
   return ok;
