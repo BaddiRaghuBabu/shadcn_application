@@ -121,6 +121,10 @@ export async function GET() {
       account_id: a.Id,
       name: a.Name ?? null,
       account_type: a.AccountType ?? null,
+      fully_qualified_name: a.FullyQualifiedName ?? null,
+      account_sub_type: a.AccountSubType ?? null,
+      current_balance: a.CurrentBalance ?? null,
+
     }))
 
     console.log(

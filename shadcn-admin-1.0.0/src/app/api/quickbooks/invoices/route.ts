@@ -58,5 +58,13 @@ export async function GET() {
     });
   }
 
-  return NextResponse.json({ synced: fetched });
-}
+  const simplified = (all as any[]).map((inv) => ({
+    invoice_id: inv.Id,
+    doc_number: inv.DocNumber ?? null,
+    customer_name: inv.CustomerRef?.name ?? null,
+    total_amt: inv.TotalAmt ?? null,
+    balance: inv.Balance ?? null,
+    currency_code: inv.CurrencyRef?.value ?? null,
+  }));
+
+  return NextResponse.json({ synced: fetched, invoices: simplified });}
