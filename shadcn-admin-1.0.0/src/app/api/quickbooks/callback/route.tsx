@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/supabaseClient";
 import { getQuickBooksSettings } from "@/lib/quickbooksService";
+import { getQuickBooksApiBase } from "@/lib/quickbooksApi";
+
 
 function clearTempCookies(res: NextResponse) {
   const opts = { path: "/", maxAge: 0 };
@@ -82,7 +84,8 @@ export async function GET(req: NextRequest) {
   // Fetch company info for display
   let companyName: string | null = null;
   try {
-    const infoRes = await fetch(`https://quickbooks.api.intuit.com/v3/company/${realmId}/companyinfo/${realmId}`, {
+    const apiBase = getQuickBooksApiBase();
+    const infoRes = await fetch(`${apiBase}/v3/company/${realmId}/companyinfo/${realmId}`, {
       headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: "application/json" },
     });
     if (infoRes.ok) {

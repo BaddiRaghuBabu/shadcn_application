@@ -2,6 +2,8 @@
 /* eslint-disable no-await-in-loop, @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/supabaseClient";
+import { getQuickBooksApiBase } from "@/lib/quickbooksApi";
+
 
 export async function GET() {
   const supabase = getSupabaseAdminClient();
@@ -15,7 +17,8 @@ export async function GET() {
 
   const realmId = token.realm_id;
   const accessToken = token.access_token;
-  const baseUrl = `https://quickbooks.api.intuit.com/v3/company/${realmId}/query`;
+  const apiBase = getQuickBooksApiBase();
+  const baseUrl = `${apiBase}/v3/company/${realmId}/query`;  
   const pageSize = 100;
   let start = 1;
   let fetched = 0;

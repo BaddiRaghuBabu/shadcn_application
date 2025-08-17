@@ -2,6 +2,8 @@
 /* eslint-disable no-await-in-loop, @typescript-eslint/no-explicit-any, no-console */
 import { NextResponse } from "next/server"
 import { getSupabaseAdminClient } from "@/lib/supabaseClient"
+import { getQuickBooksApiBase } from "@/lib/quickbooksApi"
+
 
 export async function GET() {
   const reqId = Math.random().toString(36).slice(2)
@@ -36,7 +38,8 @@ export async function GET() {
     console.log(`[QBO][${reqId}] realmId=${realmId}`)
     console.log(`[QBO][${reqId}] accessToken(masked)=${maskedToken}`)
 
-    const baseUrl = `https://quickbooks.api.intuit.com/v3/company/${realmId}/query`
+    const apiBase = getQuickBooksApiBase()
+    const baseUrl = `${apiBase}/v3/company/${realmId}/query`
     const query = encodeURIComponent("select * from Account")
     const url = `${baseUrl}?query=${query}`
     console.log(`[QBO][${reqId}] Fetching Accounts: ${url}`)
