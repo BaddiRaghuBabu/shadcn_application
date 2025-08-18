@@ -494,6 +494,8 @@ export default function AccountingConnectionsPage() {
         router.push("/connection/api-key-xero");
       } else if (meta.id === "quickbooks") {
         router.push("/connection/api-key-quickbooks");
+      } else if (meta.id === "sage") {
+        router.push("/connection/api-key-sage");
       } else {
         // external/other flows
         window.location.assign(meta.oauthUrl);
