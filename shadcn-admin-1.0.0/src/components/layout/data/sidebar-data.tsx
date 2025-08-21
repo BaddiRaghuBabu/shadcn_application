@@ -81,6 +81,7 @@ export const sidebarData: SidebarData = {
           url: "/connection",
           icon: IconUsers,
         },
+        
          {
           title: "Admin",
           url: "/admin-users",
@@ -145,6 +146,17 @@ export const sidebarData: SidebarData = {
           url: "/contacts",
           icon: IconAddressBook,
         },
+      ],
+    },
+         {
+      title: "quickbooks ",
+      items: [
+        {
+          title: "Accountanting",
+          url: "/quickbooks",
+          icon: IconFileInvoice,
+        },
+
       ],
     },
     {

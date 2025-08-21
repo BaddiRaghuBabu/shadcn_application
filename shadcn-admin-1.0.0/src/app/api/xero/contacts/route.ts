@@ -32,6 +32,8 @@ export async function GET() {
     const { data: token, error: tokenError } = await supabase
       .from("xero_tokens")
       .select("tenant_id, access_token, refresh_token")
+      .order("updated_at", { ascending: false })
+      .limit(1)
       .single();
 
     if (tokenError) {

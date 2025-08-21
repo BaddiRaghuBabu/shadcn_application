@@ -20,6 +20,8 @@ export async function GET() {
     .from("xero_tokens")
     // ⬇️ include expiry + timestamps so the UI can count down
     .select("tenant_id, access_token, refresh_token, expires_at, updated_at, created_at")
+    .order("updated_at", { ascending: false })
+    .limit(1)
     .single();
 
   if (!token) {
