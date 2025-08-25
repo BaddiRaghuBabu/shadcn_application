@@ -4,6 +4,9 @@
 @plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
+/* Reserve space for the vertical scrollbar to avoid overlaying right-edge UI */
+html { scrollbar-gutter: stable both-edges; }
+
 
 :root {
   --background: hsl(0 0% 100%);
