@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import {
-  Search,
   Trash2,
   Cookie,
   Brush,
@@ -13,10 +12,8 @@ import {
   Shield,
   MonitorSmartphone,
   Cloud,
-  Languages,
   Workflow,
   Cog,
-  Puzzle,
   KeyRound,
   Wallet,
   ChevronRight,
@@ -33,6 +30,8 @@ import {
   Check,
   type LucideIcon,
 } from "lucide-react";
+import { SettingsSidebar } from "./components/sidebar";
+
 
 /* ---------------------------------- Types --------------------------------- */
 
@@ -85,44 +84,9 @@ export default function BrowserSettingsLikeEdge() {
   return (
     <main className="h-screen overflow-hidden bg-white text-neutral-900">
       <div className="grid h-full grid-cols-[320px_minmax(0,1fr)]">
-        {/* LEFT SIDEBAR (fixed) */}
-        <aside className="relative h-full border-r border-neutral-200">
-          <div className="flex h-full flex-col px-6 py-6">
-            <h1 className="text-2xl font-semibold">Settings</h1>
-
-            {/* Search */}
-            <div className="relative mt-4">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-60" />
-              <input
-                placeholder="Search settings"
-                className="w-full rounded-lg border bg-white pl-10 pr-3 py-2 text-sm outline-none ring-0 placeholder:text-neutral-400"
-              />
-            </div>
-
-            {/* Nav items (left side) */}
-            <nav className="mt-4 space-y-1">
-              {LEFT_ITEMS.map((item, i) => (
-                <button
-                  key={item.label}
-                  className={`relative flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm hover:bg-neutral-50 ${
-                    i === 0 ? "bg-neutral-50" : ""
-                  }`}
-                >
-                  {i === 0 && (
-                    <span className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r bg-blue-600" />
-                  )}
-                  <item.icon className="h-4 w-4 opacity-70" />
-                  <span className="flex-1">{item.label}</span>
-                  {item.external ? <ExternalLink className="h-4 w-4 opacity-60" /> : null}
-                </button>
-              ))}
-            </nav>
-
-            <button className="mt-auto rounded-lg border px-3 py-2 text-sm hover:bg-neutral-50">
-              Send feedback
-            </button>
-          </div>
-        </aside>
+              
+      {/* LEFT SIDEBAR (fixed) */}
+        <SettingsSidebar />
 
         {/* RIGHT CONTENT (only this scrolls) */}
         <section
@@ -653,22 +617,6 @@ function IconBtn({ icon: Icon, ariaLabel }: { icon: LucideIcon; ariaLabel: strin
     </button>
   );
 }
-
-const LEFT_ITEMS: { icon: LucideIcon; label: string; external?: boolean }[] = [
-  { icon: UserRound, label: "Profiles" },
-  { icon: KeyRound, label: "Passwords and autofill" },
-  { icon: Shield, label: "Privacy, search, and services" },
-  { icon: Brush, label: "Appearance" },
-  { icon: MonitorSmartphone, label: "Default browser" },
-  { icon: Cloud, label: "Start, home, and new tab page" },
-  { icon: Languages, label: "Languages" },
-  { icon: Download, label: "Downloads" },
-  { icon: Workflow, label: "Accessibility" },
-  { icon: Cog, label: "System and performance" },
-  { icon: Puzzle, label: "Extensions", external: true },
-  { icon: Wallet, label: "AI innovations" },
-  { icon: User, label: "About" },
-];
 
 /* ------------------------------ Reusable pieces ------------------------------ */
 
