@@ -49,7 +49,7 @@ const menuItems: KebabMenuItem[] = [
     label: "Settings",
     icon: Settings,
     showChevron: true,
-    onSelect: () => window.open("/settings", "_blank", "noopener,noreferrer"),
+    onSelect: () => window.open("/browser-settings",),
   },
   {
     type: "item",
