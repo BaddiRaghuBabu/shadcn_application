@@ -2,6 +2,7 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
+import type { ElementType, ReactNode } from "react";
 import {
   ChevronRight,
   ExternalLink,
@@ -10,7 +11,6 @@ import {
   Download,
   Trash2,
   Shield,
-  Lock,
   Languages,
   Puzzle,
   MonitorSmartphone,
@@ -21,8 +21,9 @@ import {
   UserRound,
   Cloud,
   Cog,
-  CircleCheck,
   Pencil,
+  type LucideIcon,
+
 } from "lucide-react";
 
 export default function SettingsPage() {
@@ -164,7 +165,14 @@ export default function SettingsPage() {
 
 /* ---------- small helpers ---------- */
 
-function ActionChip({ icon: Icon, label }: { icon: any; label: string }) {
+function ActionChip({
+  icon: Icon,
+  label,
+}: {
+  icon: ElementType;
+  label: string;
+}) {
+  
   return (
     <button className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm hover:bg-neutral-50">
       <Icon className="h-4 w-4" />
@@ -180,7 +188,7 @@ function BlockHeader({
 }: {
   title: string;
   subtitle?: string;
-  action?: React.ReactNode;
+  action?: ReactNode;
 }) {
   return (
     <div className="flex items-start justify-between px-4 py-3">
@@ -200,7 +208,7 @@ function ListRow({
   label,
   external = false,
 }: {
-  icon: any;
+  icon: ElementType;
   label: string;
   external?: boolean;
 }) {
