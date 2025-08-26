@@ -55,7 +55,7 @@ type Row = { key: RowKey; label: string; icon: LucideIcon };
 
 /** Map each key to the page you want to open */
 const PROFILE_ROUTES: Record<RowKey, string> = {
-  [PROFILE_KEYS.USER_PROFILE_MANAGEMENT]: "/profile/user-profile-management",
+  [PROFILE_KEYS.USER_PROFILE_MANAGEMENT]: "/browser-settings/profile/user-profile-management",
   [PROFILE_KEYS.EMAIL_VERIFICATION]: "/settings/profile/email-verification",
   [PROFILE_KEYS.CHANGE_EMAIL]: "/settings/profile/change-email",
   [PROFILE_KEYS.IDP_FEDERATION]: "/settings/profile/idp-federation",

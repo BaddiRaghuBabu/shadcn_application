@@ -9,9 +9,7 @@ import {
   User2,
   Building2,
   Globe,
-  Languages,
   Bell,
-  Smartphone,
   LayoutGrid,
   Pin,
   Filter,
@@ -90,13 +88,14 @@ export default function UserProfileManagementPage() {
     const root = document.documentElement;
     const mql = window.matchMedia?.("(prefers-color-scheme: dark)");
     const apply = () => {
-      const wantsDark = state.theme === "dark" || (state.theme === "system" && mql?.matches);
-      root.classList.toggle("dark", !!wantsDark);
-    };
-    apply();
-    mql?.addEventListener?.("change", apply);
-    return () => mql?.removeEventListener?.("change", apply);
-  }, [state.theme]);
+      const wantsDark =
+        state.theme === "dark" || (state.theme === "system" && mql?.matches)
+      root.classList.toggle("dark", !!wantsDark)
+    }
+    apply()
+    mql?.addEventListener?.("change", apply)
+    return () => mql?.removeEventListener?.("change", apply)
+  }, [state.theme])
 
   const initials = useMemo(
     () =>
@@ -110,7 +109,7 @@ export default function UserProfileManagementPage() {
   );
 
   return (
-    <section className="edge-scroll min-h-screen overflow-y-auto bg-neutral-50 p-4 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100 sm:p-6">
+    <section className="edge-scroll min-h-screen overflow-y-auto bg-neutral-50 p-4 text-neutral-900 sm:p-6 dark:bg-neutral-950 dark:text-neutral-100">
       <div className="mx-auto max-w-5xl">
         {/* Breadcrumb / back */}
         <div className="mb-4 flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400">
@@ -213,7 +212,12 @@ export default function UserProfileManagementPage() {
                     { label: "Dark", value: "dark" },
                     { label: "System", value: "system" },
                   ]}
-                  onChange={(v) => setState((s) => ({ ...s, theme: v as ProfileState["theme"] }))}
+                  onChange={(v) =>
+                    setState((s) => ({
+                      ...s,
+                      theme: v as ProfileState["theme"],
+                    }))
+                  }
                 />
                 <SelectField
                   label="Preferred language"
@@ -223,7 +227,12 @@ export default function UserProfileManagementPage() {
                     { label: "తెలుగు", value: "te" },
                     { label: "हिन्दी", value: "hi" },
                   ]}
-                  onChange={(v) => setState((s) => ({ ...s, language: v as ProfileState["language"] }))}
+                    onChange={(v) =>
+                    setState((s) => ({
+                      ...s,
+                      language: v as ProfileState["language"],
+                    }))
+                  }
                 />
               </TwoCol>
             </Row>
@@ -242,7 +251,12 @@ export default function UserProfileManagementPage() {
                   { label: "Compact", value: "compact" },
                   { label: "Dashboard", value: "dashboard" },
                 ]}
-                onChange={(v) => setState((s) => ({ ...s, layout: v as ProfileState["layout"] }))}
+                  onChange={(v) =>
+                  setState((s) => ({
+                    ...s,
+                    layout: v as ProfileState["layout"],
+                  }))
+                }
               />
             </Row>
             <Row icon={Pin}>
@@ -261,28 +275,40 @@ export default function UserProfileManagementPage() {
             </Row>
           </Section>
 
-          <Section title="Notification preferences" description="Choose how you receive important updates.">
+            <Section
+            title="Notification preferences"
+            description="Choose how you receive important updates."
+          >
             <Row icon={Bell}>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <ToggleField
                   label="Email"
                   checked={state.notifications.email}
                   onChange={(v) =>
-                    setState((s) => ({ ...s, notifications: { ...s.notifications, email: v } }))
+                    setState((s) => ({
+                      ...s,
+                      notifications: { ...s.notifications, email: v },
+                    }))
                   }
                 />
                 <ToggleField
                   label="SMS"
                   checked={state.notifications.sms}
                   onChange={(v) =>
-                    setState((s) => ({ ...s, notifications: { ...s.notifications, sms: v } }))
+                  setState((s) => ({
+                      ...s,
+                      notifications: { ...s.notifications, sms: v },
+                    }))
                   }
                 />
                 <ToggleField
                   label="In-app"
                   checked={state.notifications.inapp}
                   onChange={(v) =>
-                    setState((s) => ({ ...s, notifications: { ...s.notifications, inapp: v } }))
+                     setState((s) => ({
+                      ...s,
+                      notifications: { ...s.notifications, inapp: v },
+                    }))
                   }
                 />
               </div>
