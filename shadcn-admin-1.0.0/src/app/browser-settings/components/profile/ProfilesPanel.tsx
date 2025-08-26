@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import {
   ChevronRight,
   ExternalLink,
@@ -26,30 +27,83 @@ import {
   Ban,
   FileDown,
   Plus,
-  type LucideIcon, // <-- combine type here to avoid duplicate import
+  type LucideIcon,
 } from "lucide-react";
 
+/** Unique keys for Profile settings rows */
+export const PROFILE_KEYS = {
+  USER_PROFILE_MANAGEMENT: "user_profile_management",
+  EMAIL_VERIFICATION: "email_verification",
+  CHANGE_EMAIL: "change_email",
+  IDP_FEDERATION: "idp_federation",
+  SOCIAL_LINKING: "social_linking",
+  MFA: "mfa",
+  SOCIAL_OAUTH: "social_oauth",
+  SELF_SERVICE: "self_service",
+  ROLE_BASED_UI: "role_based_ui",
+  FLEXIBLE_SSO: "flexible_sso",
+  PASSWORD_RECOVERY: "password_recovery",
+  ACCOUNT_SETTINGS: "account_settings",
+  USER_REG_VERIFICATION: "user_reg_verification",
+  IP_ALLOWLISTING: "ip_allowlisting",
+  IP_RESTRICTIONS: "ip_restrictions",
+  DATA_EXPORT_DELETION: "data_export_deletion",
+} as const;
+
+type RowKey = typeof PROFILE_KEYS[keyof typeof PROFILE_KEYS];
+type Row = { key: RowKey; label: string; icon: LucideIcon };
+
+/** Map each key to the page you want to open */
+const PROFILE_ROUTES: Record<RowKey, string> = {
+  [PROFILE_KEYS.USER_PROFILE_MANAGEMENT]: "/profile/user-profile-management",
+  [PROFILE_KEYS.EMAIL_VERIFICATION]: "/settings/profile/email-verification",
+  [PROFILE_KEYS.CHANGE_EMAIL]: "/settings/profile/change-email",
+  [PROFILE_KEYS.IDP_FEDERATION]: "/settings/profile/idp-federation",
+  [PROFILE_KEYS.SOCIAL_LINKING]: "/settings/profile/social-linking",
+  [PROFILE_KEYS.MFA]: "/settings/profile/mfa",
+  [PROFILE_KEYS.SOCIAL_OAUTH]: "/settings/profile/social-oauth",
+  [PROFILE_KEYS.SELF_SERVICE]: "/settings/profile/self-service",
+  [PROFILE_KEYS.ROLE_BASED_UI]: "/settings/profile/role-based-ui",
+  [PROFILE_KEYS.FLEXIBLE_SSO]: "/settings/profile/flexible-sso",
+  [PROFILE_KEYS.PASSWORD_RECOVERY]: "/settings/profile/password-recovery",
+  [PROFILE_KEYS.ACCOUNT_SETTINGS]: "/settings/profile/account-settings",
+  [PROFILE_KEYS.USER_REG_VERIFICATION]: "/settings/profile/user-registration",
+  [PROFILE_KEYS.IP_ALLOWLISTING]: "/settings/profile/ip-allowlisting",
+  [PROFILE_KEYS.IP_RESTRICTIONS]: "/settings/profile/ip-restrictions",
+  [PROFILE_KEYS.DATA_EXPORT_DELETION]: "/settings/profile/data-export-deletion",
+};
+
+/** Section 1 */
+const IDENTITY_ACCESS: Row[] = [
+  { key: PROFILE_KEYS.USER_PROFILE_MANAGEMENT, label: "User Profile Management", icon: User2 },
+  { key: PROFILE_KEYS.EMAIL_VERIFICATION, label: "Email Verification", icon: ShieldCheck },
+  { key: PROFILE_KEYS.CHANGE_EMAIL, label: "Change Email Address", icon: KeyRound },
+  { key: PROFILE_KEYS.IDP_FEDERATION, label: "Identity Federation with External IdPs", icon: Link2 },
+  { key: PROFILE_KEYS.SOCIAL_LINKING, label: "Social Login & Identity Linking", icon: Users },
+  { key: PROFILE_KEYS.MFA, label: "Multi-Factor Authentication (2FA/MFA)", icon: Lock },
+  { key: PROFILE_KEYS.SOCIAL_OAUTH, label: "Social Login (OAuth)", icon: LogIn },
+  { key: PROFILE_KEYS.SELF_SERVICE, label: "Self-Service Account Management", icon: Settings },
+];
+
+/** Section 2 */
+const ACCOUNT_POLICIES: Row[] = [
+  { key: PROFILE_KEYS.ROLE_BASED_UI, label: "Role-Based Tailored UI", icon: SlidersHorizontal },
+  { key: PROFILE_KEYS.FLEXIBLE_SSO, label: "Flexible Authentication & SSO", icon: Fingerprint },
+  { key: PROFILE_KEYS.PASSWORD_RECOVERY, label: "Password Recovery (Account Reset)", icon: LifeBuoy },
+  { key: PROFILE_KEYS.ACCOUNT_SETTINGS, label: "User Profile & Account Settings", icon: UserCog },
+  { key: PROFILE_KEYS.USER_REG_VERIFICATION, label: "User Registration & Verification", icon: UserPlus },
+  { key: PROFILE_KEYS.IP_ALLOWLISTING, label: "IP Allowlisting & Access Policies", icon: Globe },
+  { key: PROFILE_KEYS.IP_RESTRICTIONS, label: "IP Restrictions", icon: Ban },
+  { key: PROFILE_KEYS.DATA_EXPORT_DELETION, label: "Account Data Export/Deletion", icon: FileDown },
+];
+
 export default function EdgeSettingsPage() {
-  // --- your requested list ---
-  const sections: { label: string; icon: LucideIcon }[] = [
-    { label: "User Profile Management", icon: User2 },
-    { label: "Email Verification", icon: ShieldCheck },
-    { label: "Change Email Address", icon: KeyRound },
-    { label: "Identity Federation with External IdPs", icon: Link2 },
-    { label: "Social Login & Identity Linking", icon: Users },
-    { label: "Multi-Factor Authentication (2FA/MFA)", icon: Lock },
-    { label: "Social Login (OAuth)", icon: LogIn },
-    { label: "Self-Service Account Management", icon: Settings },
-    { label: "Role-Based Tailored UI", icon: SlidersHorizontal },
-    { label: "Flexible Authentication & SSO", icon: Fingerprint },
-    { label: "Password Recovery (Account Reset)", icon: LifeBuoy },
-    { label: "User Profile & Account Settings", icon: UserCog },
-    { label: "User Profile Management", icon: User2 }, // (duplicate per your list)
-    { label: "User Registration & Verification", icon: UserPlus },
-    { label: "IP Allowlisting & Access Policies", icon: Globe },
-    { label: "IP Restrictions", icon: Ban },
-    { label: "Account Data Export/Deletion", icon: FileDown },
-  ];
+  const router = useRouter();
+
+  const handleRowClick = (key: RowKey) => {
+    const href = PROFILE_ROUTES[key];
+    if (href) router.push(href);
+  };
 
   return (
     <section className="edge-scroll h-screen overflow-y-auto bg-neutral-50 p-4 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100 sm:p-6">
@@ -116,35 +170,17 @@ export default function EdgeSettingsPage() {
           </button>
         </div>
 
-        {/* Profile settings – replaced with your list */}
+        {/* Profile settings */}
         <h2 className="text-lg font-semibold">Profile settings</h2>
         <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-400">
           These settings apply to your profile in the app.
         </p>
 
-        <div className="mb-10 rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-          {sections.map(({ label, icon: Icon }, idx) => (
-            <button
-              key={`${label}-${idx}`}
-              type="button"
-              className={[
-                "flex w-full items-center justify-between px-4 py-4 text-left",
-                "hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
-                "dark:hover:bg-neutral-800/60",
-                idx !== 0 ? "border-t border-neutral-200 dark:border-neutral-800" : "",
-              ].join(" ")}
-              aria-label={label}
-            >
-              <span className="flex items-center gap-3">
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-neutral-200 bg-white/80 shadow-sm dark:border-neutral-800 dark:bg-neutral-800/60">
-                  <Icon className="h-4 w-4 opacity-70" />
-                </span>
-                <span className="text-sm">{label}</span>
-              </span>
-              <ChevronRight className="h-4 w-4 opacity-50" />
-            </button>
-          ))}
-        </div>
+        {/* Section 1: Identity & access */}
+        <SectionCard title="Identity & access" rows={IDENTITY_ACCESS} onRowClick={handleRowClick} />
+
+        {/* Section 2: Account & policies */}
+        <SectionCard title="Account & policies" rows={ACCOUNT_POLICIES} onRowClick={handleRowClick} />
       </div>
 
       {/* Scrollbar styling */}
@@ -174,7 +210,50 @@ export default function EdgeSettingsPage() {
   );
 }
 
-/* helper */
+/* ---------------- components ---------------- */
+
+function SectionCard({
+  title,
+  rows,
+  onRowClick,
+}: {
+  title: string;
+  rows: Row[];
+  onRowClick?: (key: RowKey) => void;
+}) {
+  return (
+    <div className="mb-8">
+      <div className="mb-2 text-sm font-medium text-neutral-700 dark:text-neutral-300">
+        {title}
+      </div>
+      <div className="rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+        {rows.map(({ key, label, icon: Icon }, idx) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => onRowClick?.(key)}
+            className={[
+              "flex w-full items-center justify-between px-4 py-4 text-left",
+              "hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+              "dark:hover:bg-neutral-800/60",
+              idx !== 0 ? "border-t border-neutral-200 dark:border-neutral-800" : "",
+            ].join(" ")}
+            aria-label={label}
+          >
+            <span className="flex items-center gap-3">
+              <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-neutral-200 bg-white/80 shadow-sm dark:border-neutral-800 dark:bg-neutral-800/60">
+                <Icon className="h-4 w-4 opacity-70" />
+              </span>
+              <span className="text-sm">{label}</span>
+            </span>
+            <ChevronRight className="h-4 w-4 opacity-50" />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function IconBtn({
   children,
   ariaLabel,
