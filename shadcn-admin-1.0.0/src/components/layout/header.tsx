@@ -8,6 +8,7 @@ import { ThemeSwitch } from "@/components/theme-switch";
 import { KebabMenu, type KebabMenuItem } from "@/components/kebab-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Settings, HelpCircle, LogOut } from "lucide-react";
+import { toast } from "sonner"; // <-- add this
 
 const user = {
   name: "Baddi Raghubabu",
@@ -41,7 +42,16 @@ const accountHeader = (
     </div>
   </div>
 );
-// ...your imports above stay the same
+
+// Replace console.log with a real handler
+function handleLogout() {
+  // TODO: wire up your auth sign-out here (e.g., NextAuth signOut or your API)
+  toast("Signing out…");
+  // Example:
+  // await signOut({ callbackUrl: "/login" });
+  // or
+  // await fetch("/api/logout", { method: "POST" }).then(() => (window.location.href = "/login"));
+}
 
 const menuItems: KebabMenuItem[] = [
   {
@@ -49,7 +59,7 @@ const menuItems: KebabMenuItem[] = [
     label: "Settings",
     icon: Settings,
     showChevron: true,
-    onSelect: () => window.open("/browser-settings",),
+    onSelect: () => window.open("/browser-settings"),
   },
   {
     type: "item",
@@ -65,10 +75,9 @@ const menuItems: KebabMenuItem[] = [
     icon: LogOut,
     destructive: true,
     showChevron: false,
-    onSelect: () => console.log("Logout"),
+    onSelect: handleLogout, // <-- no console usage
   },
 ];
-
 
 export function Header() {
   return (

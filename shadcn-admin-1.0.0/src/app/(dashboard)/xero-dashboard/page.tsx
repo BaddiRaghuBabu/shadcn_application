@@ -27,7 +27,7 @@ type InvoiceRow = {
   amount_due: number | null;
   total: number | null;
   issued_at: string | null; // timestamptz
-  due_at: string | null;    // timestamptz
+  due_at: string | null; // timestamptz
 };
 
 type ContactRow = {
@@ -48,18 +48,18 @@ type Summary = {
 export default function XeroAnalyticsPage() {
   /* ---------------- DOM refs for 6 charts ---------------- */
   const refOverview = useRef<HTMLDivElement>(null);
-  const refMonthly  = useRef<HTMLDivElement>(null);
-  const refStatus   = useRef<HTMLDivElement>(null);
-  const refAging    = useRef<HTMLDivElement>(null);
-  const refTopCust  = useRef<HTMLDivElement>(null);
+  const refMonthly = useRef<HTMLDivElement>(null);
+  const refStatus = useRef<HTMLDivElement>(null);
+  const refAging = useRef<HTMLDivElement>(null);
+  const refTopCust = useRef<HTMLDivElement>(null);
   const refContacts = useRef<HTMLDivElement>(null);
 
   /* ---------------- chart instances ---------------- */
   const cOverview = useRef<EChartsInstance | null>(null);
-  const cMonthly  = useRef<EChartsInstance | null>(null);
-  const cStatus   = useRef<EChartsInstance | null>(null);
-  const cAging    = useRef<EChartsInstance | null>(null);
-  const cTopCust  = useRef<EChartsInstance | null>(null);
+  const cMonthly = useRef<EChartsInstance | null>(null);
+  const cStatus = useRef<EChartsInstance | null>(null);
+  const cAging = useRef<EChartsInstance | null>(null);
+  const cTopCust = useRef<EChartsInstance | null>(null);
   const cContacts = useRef<EChartsInstance | null>(null);
 
   /* ---------------- page state ---------------- */
@@ -86,7 +86,7 @@ export default function XeroAnalyticsPage() {
   }, []);
   const axisText = isDark ? "#d1d5db" : "#374151";
   const gridLine = isDark ? "#334155" : "#e5e7eb";
-  const subText  = isDark ? "#9ca3af" : "#6b7280";
+  const subText = isDark ? "#9ca3af" : "#6b7280";
 
   /* ---------------- load data once ---------------- */
   useEffect(() => {
@@ -115,7 +115,9 @@ export default function XeroAnalyticsPage() {
       const openStatuses = new Set(["AUTHORISED", "SUBMITTED", "DRAFT"]);
       const now = Date.now();
 
-      const openInvoices = inv.filter((r) => openStatuses.has(safeStatus(r.status))).length;
+      const openInvoices = inv.filter((r) =>
+        openStatuses.has(safeStatus(r.status))
+      ).length;
       const overdueInvoices = inv.filter(
         (r) =>
           r.amount_due &&
@@ -124,7 +126,10 @@ export default function XeroAnalyticsPage() {
           new Date(r.due_at).getTime() < now &&
           safeStatus(r.status) !== "PAID"
       ).length;
-      const outstandingTotal = inv.reduce((s, r) => s + (Number(r.amount_due) || 0), 0);
+      const outstandingTotal = inv.reduce(
+        (s, r) => s + (Number(r.amount_due) || 0),
+        0
+      );
 
       setSummary({
         invoices: inv.length,
@@ -141,50 +146,49 @@ export default function XeroAnalyticsPage() {
   }, []);
 
   /* ---------------- live refresh button ---------------- */
-  const refresh = () => {
-    // Cheap way to reuse the above effect:
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    (async () => {
-      setLoading(true);
-      const [invRes, cRes] = await Promise.all([
-        supabase
-          .from("xero_invoices")
-          .select(
-            "invoice_id,contact_name,status,currency_code,amount_due,total,issued_at,due_at"
-          ),
-        supabase
-          .from("xero_contacts")
-          .select("contact_id,is_customer,is_supplier,email"),
-      ]);
+  const refresh = async () => {
+    setLoading(true);
+    const [invRes, cRes] = await Promise.all([
+      supabase
+        .from("xero_invoices")
+        .select(
+          "invoice_id,contact_name,status,currency_code,amount_due,total,issued_at,due_at"
+        ),
+      supabase.from("xero_contacts").select("contact_id,is_customer,is_supplier,email"),
+    ]);
 
-      const inv = (invRes.data ?? []) as InvoiceRow[];
-      const cons = (cRes.data ?? []) as ContactRow[];
-      setInvoices(inv);
-      setContacts(cons);
+    const inv = (invRes.data ?? []) as InvoiceRow[];
+    const cons = (cRes.data ?? []) as ContactRow[];
+    setInvoices(inv);
+    setContacts(cons);
 
-      const openStatuses = new Set(["AUTHORISED", "SUBMITTED", "DRAFT"]);
-      const now = Date.now();
-      const openInvoices = inv.filter((r) => openStatuses.has(safeStatus(r.status))).length;
-      const overdueInvoices = inv.filter(
-        (r) =>
-          r.amount_due &&
-          r.amount_due > 0 &&
-          r.due_at &&
-          new Date(r.due_at).getTime() < now &&
-          safeStatus(r.status) !== "PAID"
-      ).length;
-      const outstandingTotal = inv.reduce((s, r) => s + (Number(r.amount_due) || 0), 0);
+    const openStatuses = new Set(["AUTHORISED", "SUBMITTED", "DRAFT"]);
+    const now = Date.now();
+    const openInvoices = inv.filter((r) =>
+      openStatuses.has(safeStatus(r.status))
+    ).length;
+    const overdueInvoices = inv.filter(
+      (r) =>
+        r.amount_due &&
+        r.amount_due > 0 &&
+        r.due_at &&
+        new Date(r.due_at).getTime() < now &&
+        safeStatus(r.status) !== "PAID"
+    ).length;
+    const outstandingTotal = inv.reduce(
+      (s, r) => s + (Number(r.amount_due) || 0),
+      0
+    );
 
-      setSummary({
-        invoices: inv.length,
-        openInvoices,
-        overdueInvoices,
-        contacts: cons.length,
-        outstandingTotal,
-      });
-      setLoading(false);
-      drawAll(); // redraw with fresh data
-    })();
+    setSummary({
+      invoices: inv.length,
+      openInvoices,
+      overdueInvoices,
+      contacts: cons.length,
+      outstandingTotal,
+    });
+    setLoading(false);
+    drawAll(); // redraw with fresh data
   };
 
   /* ---------------- derived aggregations ---------------- */
@@ -196,8 +200,12 @@ export default function XeroAnalyticsPage() {
     // use UTC first-of-month for stability
     base.setUTCDate(1);
     for (let i = 11; i >= 0; i--) {
-      const d = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() - i, 1));
-      L.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
+      const d = new Date(
+        Date.UTC(base.getUTCFullYear(), base.getUTCMonth() - i, 1)
+      );
+      L.push(
+        `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`
+      );
     }
     return L;
   }, []);
@@ -220,7 +228,10 @@ export default function XeroAnalyticsPage() {
       const s = safeStatus(r.status);
       map.set(s, (map.get(s) ?? 0) + 1);
     });
-    const arr = Array.from(map.entries()).map(([name, value]) => ({ name, value }));
+    const arr = Array.from(map.entries()).map(([name, value]) => ({
+      name,
+      value,
+    }));
     // sort by value desc
     arr.sort((a, b) => b.value - a.value);
     return arr;
@@ -228,7 +239,7 @@ export default function XeroAnalyticsPage() {
 
   // AR aging buckets by outstanding (amount_due)
   const agingBuckets = useMemo(() => {
-    const buckets = { "Current": 0, "1–30": 0, "31–60": 0, "61–90": 0, "90+": 0 };
+    const buckets = { Current: 0, "1–30": 0, "31–60": 0, "61–90": 0, "90+": 0 };
     const now = Date.now();
     invoices.forEach((r) => {
       const due = r.due_at ? new Date(r.due_at).getTime() : NaN;
@@ -242,7 +253,9 @@ export default function XeroAnalyticsPage() {
       else buckets["90+"] += bal;
     });
     const labels = Object.keys(buckets);
-    const values = labels.map((k) => round2(buckets[k as keyof typeof buckets]));
+    const values = labels.map((k) =>
+      round2(buckets[k as keyof typeof buckets])
+    );
     return { labels, values };
   }, [invoices]);
 
@@ -254,7 +267,10 @@ export default function XeroAnalyticsPage() {
       const bal = Number(r.amount_due || 0);
       if (bal > 0) map.set(name, (map.get(name) ?? 0) + bal);
     });
-    const arr = Array.from(map.entries()).map(([name, value]) => ({ name, value }));
+    const arr = Array.from(map.entries()).map(([name, value]) => ({
+      name,
+      value,
+    }));
     arr.sort((a, b) => b.value - a.value);
     return arr.slice(0, 10);
   }, [invoices]);
@@ -267,14 +283,20 @@ export default function XeroAnalyticsPage() {
       const total = Number(r.total || 0);
       if (total > 0) map.set(ccy, (map.get(ccy) ?? 0) + total);
     });
-    const arr = Array.from(map.entries()).map(([name, value]) => ({ name, value: round2(value) }));
+    const arr = Array.from(map.entries()).map(([name, value]) => ({
+      name,
+      value: round2(value),
+    }));
     arr.sort((a, b) => b.value - a.value);
     return arr;
   }, [invoices]);
 
   // Contacts: type breakdown + email coverage
   const contactSplit = useMemo(() => {
-    let customer = 0, supplier = 0, both = 0, other = 0;
+    let customer = 0,
+      supplier = 0,
+      both = 0,
+      other = 0;
     contacts.forEach((c) => {
       const isC = !!c.is_customer;
       const isS = !!c.is_supplier;
@@ -292,7 +314,8 @@ export default function XeroAnalyticsPage() {
   }, [contacts]);
 
   const emailCoverage = useMemo(() => {
-    let withEmail = 0, noEmail = 0;
+    let withEmail = 0,
+      noEmail = 0;
     contacts.forEach((c) => (c.email ? withEmail++ : noEmail++));
     return [
       { name: "With email", value: withEmail },
@@ -300,7 +323,39 @@ export default function XeroAnalyticsPage() {
     ];
   }, [contacts]);
 
+  /* ── keys for effect deps (avoid complex expressions in arrays) ── */
+  const agingLabelsKey = useMemo(
+    () => agingBuckets.labels.join("|"),
+    [agingBuckets.labels]
+  );
+  const agingValuesKey = useMemo(
+    () => agingBuckets.values.join("|"),
+    [agingBuckets.values]
+  );
+  const topCustomersKey = useMemo(
+    () => JSON.stringify(topCustomers),
+    [topCustomers]
+  );
+  const currencyTotalsKey = useMemo(
+    () => JSON.stringify(currencyTotals),
+    [currencyTotals]
+  );
+  const contactSplitKey = useMemo(
+    () => JSON.stringify(contactSplit),
+    [contactSplit]
+  );
+  const emailCoverageKey = useMemo(
+    () => JSON.stringify(emailCoverage),
+    [emailCoverage]
+  );
+
   /* ---------------- ECharts lifecycle & drawing ---------------- */
+
+  // keep a ref to drawAll so mount effect doesn't depend on it
+  const drawAllRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    drawAllRef.current = drawAll;
+  });
 
   useEffect(() => {
     const onResize = () => {
@@ -314,11 +369,14 @@ export default function XeroAnalyticsPage() {
     window.addEventListener("resize", onResize);
 
     const mq = window.matchMedia?.("(prefers-color-scheme: dark)");
-    const onTheme = () => drawAll();
+    const onTheme = () => drawAllRef.current();
     mq?.addEventListener?.("change", onTheme);
 
-    const mo = new MutationObserver(() => drawAll());
-    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    const mo = new MutationObserver(() => drawAllRef.current());
+    mo.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
 
     return () => {
       window.removeEventListener("resize", onResize);
@@ -332,27 +390,25 @@ export default function XeroAnalyticsPage() {
       cTopCust.current?.dispose();
       cContacts.current?.dispose();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     drawAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     echartsReady,
     isDark,
     summary,
     monthlyCounts,
     statusDist,
-    agingBuckets.labels.join("|"),
-    agingBuckets.values.join("|"),
-    topCustomers.length,
-    currencyTotals.length,
-    contactSplit.length,
-    emailCoverage.length,
+    agingLabelsKey,
+    agingValuesKey,
+    topCustomersKey,
+    currencyTotalsKey,
+    contactSplitKey,
+    emailCoverageKey,
   ]);
 
-  const drawAll = () => {
+  function drawAll() {
     const echarts = (window as WindowWithECharts).echarts;
     if (!echarts || !echartsReady) return;
 
@@ -363,11 +419,20 @@ export default function XeroAnalyticsPage() {
       cOverview.current.setOption({
         backgroundColor: "transparent",
         aria: { enabled: true },
-        title: { text: "Overview", left: "center", textStyle: { color: axisText, fontWeight: 600 } },
+        title: {
+          text: "Overview",
+          left: "center",
+          textStyle: { color: axisText, fontWeight: 600 },
+        },
         tooltip: { trigger: "axis" },
         toolbox: {
           right: 10,
-          feature: { saveAsImage: {}, dataView: { readOnly: true }, restore: {}, magicType: { type: ["line", "bar"] } },
+          feature: {
+            saveAsImage: {},
+            dataView: { readOnly: true },
+            restore: {},
+            magicType: { type: ["line", "bar"] },
+          },
         },
         grid: { left: 40, right: 20, top: 60, bottom: 40 },
         xAxis: {
@@ -388,13 +453,25 @@ export default function XeroAnalyticsPage() {
             universalTransition: true,
             itemStyle: {
               borderRadius: [6, 6, 0, 0],
-              color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1, colorStops: [
-                { offset: 0, color: isDark ? "#34d399" : "#10b981" },
-                { offset: 1, color: isDark ? "#059669" : "#34d399" },
-              ]},
+              color: {
+                type: "linear",
+                x: 0,
+                y: 0,
+                x2: 0,
+                y2: 1,
+                colorStops: [
+                  { offset: 0, color: isDark ? "#34d399" : "#10b981" },
+                  { offset: 1, color: isDark ? "#059669" : "#34d399" },
+                ],
+              },
             },
             label: { show: true, position: "top", color: axisText },
-            data: [summary.invoices, summary.openInvoices, summary.overdueInvoices, summary.contacts],
+            data: [
+              summary.invoices,
+              summary.openInvoices,
+              summary.overdueInvoices,
+              summary.contacts,
+            ],
           },
         ],
         animationDuration: 600,
@@ -417,7 +494,15 @@ export default function XeroAnalyticsPage() {
           subtextStyle: { color: subText },
         },
         tooltip: { trigger: "axis" },
-        toolbox: { right: 10, feature: { saveAsImage: {}, dataZoom: { yAxisIndex: "none" }, restore: {}, magicType: { type: ["line", "bar"] } } },
+        toolbox: {
+          right: 10,
+          feature: {
+            saveAsImage: {},
+            dataZoom: { yAxisIndex: "none" },
+            restore: {},
+            magicType: { type: ["line", "bar"] },
+          },
+        },
         grid: { left: 48, right: 18, top: 70, bottom: 60 },
         xAxis: {
           type: "category",
@@ -459,7 +544,11 @@ export default function XeroAnalyticsPage() {
       cStatus.current.setOption({
         backgroundColor: "transparent",
         aria: { enabled: true },
-        title: { text: "Invoice Status", left: "center", textStyle: { color: axisText, fontWeight: 600 } },
+        title: {
+          text: "Invoice Status",
+          left: "center",
+          textStyle: { color: axisText, fontWeight: 600 },
+        },
         tooltip: { trigger: "item", formatter: "{b}: {c} ({d}%)" },
         legend: { type: "scroll", bottom: 0, textStyle: { color: axisText } },
         toolbox: { right: 10, feature: { saveAsImage: {}, restore: {} } },
@@ -469,7 +558,11 @@ export default function XeroAnalyticsPage() {
             radius: ["40%", "65%"],
             avoidLabelOverlap: true,
             universalTransition: true,
-            label: { color: axisText, formatter: "{b|{b}}\n{c} ({d}%)", rich: { b: { fontWeight: 600, color: axisText } } },
+            label: {
+              color: axisText,
+              formatter: "{b|{b}}\n{c} ({d}%)",
+              rich: { b: { fontWeight: 600, color: axisText } },
+            },
             data: statusDist,
           },
         ],
@@ -483,19 +576,47 @@ export default function XeroAnalyticsPage() {
       cAging.current.setOption({
         backgroundColor: "transparent",
         aria: { enabled: true },
-        title: { text: "A/R Aging (Outstanding)", left: "center", textStyle: { color: axisText, fontWeight: 600 } },
-        tooltip: { trigger: "axis", valueFormatter: (v: unknown) => formatMoney(Number(v)) },
-        toolbox: { right: 10, feature: { saveAsImage: {}, restore: {}, magicType: { type: ["line", "bar"] } } },
+        title: {
+          text: "A/R Aging (Outstanding)",
+          left: "center",
+          textStyle: { color: axisText, fontWeight: 600 },
+        },
+        tooltip: {
+          trigger: "axis",
+          valueFormatter: (v: unknown) => formatMoney(Number(v)),
+        },
+        toolbox: {
+          right: 10,
+          feature: {
+            saveAsImage: {},
+            restore: {},
+            magicType: { type: ["line", "bar"] },
+          },
+        },
         grid: { left: 52, right: 20, top: 60, bottom: 36 },
-        xAxis: { type: "category", data: agingBuckets.labels, axisLabel: { color: axisText }, axisLine: { lineStyle: { color: gridLine } } },
-        yAxis: { type: "value", axisLabel: { color: axisText }, splitLine: { lineStyle: { color: gridLine } } },
+        xAxis: {
+          type: "category",
+          data: agingBuckets.labels,
+          axisLabel: { color: axisText },
+          axisLine: { lineStyle: { color: gridLine } },
+        },
+        yAxis: {
+          type: "value",
+          axisLabel: { color: axisText },
+          splitLine: { lineStyle: { color: gridLine } },
+        },
         series: [
           {
             name: "Outstanding",
             type: "bar",
             universalTransition: true,
             itemStyle: { borderRadius: [6, 6, 0, 0] },
-            label: { show: true, position: "top", color: axisText, formatter: (p: any) => shortMoney(p.value) },
+            label: {
+              show: true,
+              position: "top",
+              color: axisText,
+              formatter: (p: { value: number }) => shortMoney(Number(p.value)),
+            },
             data: agingBuckets.values,
           },
         ],
@@ -511,17 +632,38 @@ export default function XeroAnalyticsPage() {
       cTopCust.current.setOption({
         backgroundColor: "transparent",
         aria: { enabled: true },
-        title: { text: "Top Customers by Outstanding", left: "center", textStyle: { color: axisText, fontWeight: 600 } },
-        tooltip: { trigger: "axis", valueFormatter: (v: unknown) => formatMoney(Number(v)) },
+        title: {
+          text: "Top Customers by Outstanding",
+          left: "center",
+          textStyle: { color: axisText, fontWeight: 600 },
+        },
+        tooltip: {
+          trigger: "axis",
+          valueFormatter: (v: unknown) => formatMoney(Number(v)),
+        },
         toolbox: { right: 10, feature: { saveAsImage: {}, restore: {} } },
         grid: { left: 140, right: 24, top: 60, bottom: 24 },
-        xAxis: { type: "value", axisLabel: { color: axisText }, splitLine: { lineStyle: { color: gridLine } } },
-        yAxis: { type: "category", data: labels, axisLabel: { color: axisText }, axisLine: { lineStyle: { color: gridLine } } },
+        xAxis: {
+          type: "value",
+          axisLabel: { color: axisText },
+          splitLine: { lineStyle: { color: gridLine } },
+        },
+        yAxis: {
+          type: "category",
+          data: labels,
+          axisLabel: { color: axisText },
+          axisLine: { lineStyle: { color: gridLine } },
+        },
         series: [
           {
             type: "bar",
             barWidth: 14,
-            label: { show: true, position: "right", color: axisText, formatter: (p: any) => shortMoney(p.value) },
+            label: {
+              show: true,
+              position: "right",
+              color: axisText,
+              formatter: (p: { value: number }) => shortMoney(Number(p.value)),
+            },
             data: values,
           },
         ],
@@ -564,7 +706,7 @@ export default function XeroAnalyticsPage() {
         ],
       });
     }
-  };
+  }
 
   /* ---------------- JSX ---------------- */
   return (
@@ -577,8 +719,18 @@ export default function XeroAnalyticsPage() {
 
       <div className="mb-4 flex items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold tracking-tight">Xero Analytics</h1>
-        <Button variant="outline" size="sm" onClick={refresh} disabled={loading} className="gap-2">
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={refresh}
+          disabled={loading}
+          className="gap-2"
+        >
+          {loading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4" />
+          )}
           Refresh
         </Button>
       </div>
@@ -588,39 +740,66 @@ export default function XeroAnalyticsPage() {
         <StatCard label="Invoices" value={nFmt(summary.invoices)} />
         <StatCard label="Open" value={nFmt(summary.openInvoices)} />
         <StatCard label="Overdue" value={nFmt(summary.overdueInvoices)} />
-        <StatCard label="Outstanding" value={formatMoney(summary.outstandingTotal)} />
+        <StatCard
+          label="Outstanding"
+          value={formatMoney(summary.outstandingTotal)}
+        />
       </div>
 
       {/* Charts grid */}
       <div className="grid gap-6">
         <Card className="overflow-hidden">
-          <CardHeader><CardTitle>Overview</CardTitle></CardHeader>
-          <CardContent><div ref={refOverview} className="h-[340px] w-full" /></CardContent>
+          <CardHeader>
+            <CardTitle>Overview</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div ref={refOverview} className="h-[340px] w-full" />
+          </CardContent>
         </Card>
 
         <Card className="overflow-hidden">
-          <CardHeader><CardTitle>Invoices Trend (12 Months)</CardTitle></CardHeader>
-          <CardContent><div ref={refMonthly} className="h-[340px] w-full" /></CardContent>
+          <CardHeader>
+            <CardTitle>Invoices Trend (12 Months)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div ref={refMonthly} className="h-[340px] w-full" />
+          </CardContent>
         </Card>
 
         <Card className="overflow-hidden">
-          <CardHeader><CardTitle>Invoice Status</CardTitle></CardHeader>
-          <CardContent><div ref={refStatus} className="h-[360px] w-full" /></CardContent>
+          <CardHeader>
+            <CardTitle>Invoice Status</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div ref={refStatus} className="h-[360px] w-full" />
+          </CardContent>
         </Card>
 
         <Card className="overflow-hidden">
-          <CardHeader><CardTitle>A/R Aging</CardTitle></CardHeader>
-          <CardContent><div ref={refAging} className="h-[340px] w-full" /></CardContent>
+          <CardHeader>
+            <CardTitle>A/R Aging</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div ref={refAging} className="h-[340px] w-full" />
+          </CardContent>
         </Card>
 
         <Card className="overflow-hidden xl:col-span-2">
-          <CardHeader><CardTitle>Top Customers by Outstanding</CardTitle></CardHeader>
-          <CardContent><div ref={refTopCust} className="h-[380px] w-full" /></CardContent>
+          <CardHeader>
+            <CardTitle>Top Customers by Outstanding</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div ref={refTopCust} className="h-[380px] w-full" />
+          </CardContent>
         </Card>
 
         <Card className="overflow-hidden xl:col-span-2">
-          <CardHeader><CardTitle>Contacts (Type & Email Coverage)</CardTitle></CardHeader>
-          <CardContent><div ref={refContacts} className="h-[380px] w-full" /></CardContent>
+          <CardHeader>
+            <CardTitle>Contacts (Type &amp; Email Coverage)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div ref={refContacts} className="h-[380px] w-full" />
+          </CardContent>
         </Card>
       </div>
     </div>
@@ -661,7 +840,11 @@ function safeStatus(s: string | null | undefined) {
 }
 function formatMoney(n: number, currency = "INR") {
   try {
-    return new Intl.NumberFormat(undefined, { style: "currency", currency, maximumFractionDigits: 2 }).format(n || 0);
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 2,
+    }).format(n || 0);
   } catch {
     return `${currency} ${(n || 0).toFixed(2)}`;
   }

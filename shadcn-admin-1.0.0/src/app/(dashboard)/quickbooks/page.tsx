@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  useCallback,
+  type ReactNode,
+} from "react";
 import {
   ColumnDef,
   flexRender,
@@ -92,13 +98,15 @@ export default function QuickBooksPage() {
   const [lastSyncA, setLastSyncA] = useState<Date | null>(null);
   const [lastSyncI, setLastSyncI] = useState<Date | null>(null);
 
-  const loadAccounts = async () => {
+  const loadAccounts = useCallback(async () => {
     try {
       setLoadingA(true);
       NProgress.start();
       const { data, error } = await supabase
         .from("quickbooks_accounts")
-        .select("account_id,name,account_type,account_sub_type,current_balance")
+        .select(
+          "account_id,name,account_type,account_sub_type,current_balance"
+        )
         .order("updated_at", { ascending: false });
 
       if (error) throw error;
@@ -113,15 +121,17 @@ export default function QuickBooksPage() {
       setLoadingA(false);
       NProgress.done();
     }
-  };
+  }, []);
 
-  const loadInvoices = async () => {
+  const loadInvoices = useCallback(async () => {
     try {
       setLoadingI(true);
       NProgress.start();
       const { data, error } = await supabase
         .from("quickbooks_invoices")
-        .select("invoice_id,doc_number,customer_name,status,currency_code,balance,total_amt")
+        .select(
+          "invoice_id,doc_number,customer_name,status,currency_code,balance,total_amt"
+        )
         .order("updated_at", { ascending: false });
 
       if (error) throw error;
@@ -136,16 +146,18 @@ export default function QuickBooksPage() {
       setLoadingI(false);
       NProgress.done();
     }
-  };
+  }, []);
 
   useEffect(() => {
     void Promise.all([loadAccounts(), loadInvoices()]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadAccounts, loadInvoices]);
 
   // KPI cards
   const totalAccounts = accounts.length;
-  const totalBalance = accounts.reduce((s, a) => s + (a.current_balance ?? 0), 0);
+  const totalBalance = accounts.reduce(
+    (s, a) => s + (a.current_balance ?? 0),
+    0
+  );
   const invCount = invoices.length;
   const invTotalAmt = invoices.reduce((s, i) => s + (i.total_amt ?? 0), 0);
   const invOpenAmt = invoices.reduce((s, i) => s + (i.balance ?? 0), 0);
@@ -188,15 +200,27 @@ export default function QuickBooksPage() {
             <Kpi
               title="Accounts"
               value={formatNumberIN(totalAccounts)}
-              hint={lastSyncA ? `Synced ${lastSyncA.toLocaleString()}` : "Not synced"}
+              hint={
+                lastSyncA ? `Synced ${lastSyncA.toLocaleString()}` : "Not synced"
+              }
             />
-            <Kpi title="Total Balance" value={formatINR(totalBalance)} hint="Sum of current balances" />
+            <Kpi
+              title="Total Balance"
+              value={formatINR(totalBalance)}
+              hint="Sum of current balances"
+            />
             <Kpi
               title="Invoices"
               value={formatNumberIN(invCount)}
-              hint={lastSyncI ? `Synced ${lastSyncI.toLocaleString()}` : "Not synced"}
+              hint={
+                lastSyncI ? `Synced ${lastSyncI.toLocaleString()}` : "Not synced"
+              }
             />
-            <Kpi title="Open Balance" value={formatINR(invOpenAmt)} hint={`Total Amount: ${formatINR(invTotalAmt)}`} />
+            <Kpi
+              title="Open Balance"
+              value={formatINR(invOpenAmt)}
+              hint={`Total Amount: ${formatINR(invTotalAmt)}`}
+            />
           </div>
 
           <Tabs defaultValue="accounts" className="w-full">
@@ -213,10 +237,18 @@ export default function QuickBooksPage() {
             </div>
 
             <TabsContent value="accounts" className="mt-4">
-              <AccountsTable data={accounts} loading={loadingA} onRefresh={loadAccounts} />
+              <AccountsTable
+                data={accounts}
+                loading={loadingA}
+                onRefresh={loadAccounts}
+              />
             </TabsContent>
             <TabsContent value="invoices" className="mt-4">
-              <InvoicesTable data={invoices} loading={loadingI} onRefresh={loadInvoices} />
+              <InvoicesTable
+                data={invoices}
+                loading={loadingI}
+                onRefresh={loadInvoices}
+              />
             </TabsContent>
           </Tabs>
         </CardContent>
@@ -236,13 +268,16 @@ function AccountsTable({
   loading: boolean;
   onRefresh: () => void;
 }) {
-  const [sorting, setSorting] = useState<SortingState>([{ id: "name", desc: false }]);
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: "name", desc: false },
+  ]);
   const [globalFilter, setGlobalFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [subTypeFilter, setSubTypeFilter] = useState<string>("all");
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
-    account_id: false,
-  });
+  const [columnVisibility, setColumnVisibility] =
+    useState<VisibilityState>({
+      account_id: false,
+    });
 
   const filteredData = useMemo(() => {
     let d = data;
@@ -250,14 +285,22 @@ function AccountsTable({
       const q = globalFilter.toLowerCase();
       d = d.filter((r) => (r.name ?? "").toLowerCase().includes(q));
     }
-    if (typeFilter !== "all") d = d.filter((r) => (r.account_type ?? "Unknown") === typeFilter);
-    if (subTypeFilter !== "all") d = d.filter((r) => (r.account_sub_type ?? "Unknown") === subTypeFilter);
+    if (typeFilter !== "all")
+      d = d.filter((r) => (r.account_type ?? "Unknown") === typeFilter);
+    if (subTypeFilter !== "all")
+      d = d.filter((r) => (r.account_sub_type ?? "Unknown") === subTypeFilter);
     return d;
   }, [data, globalFilter, typeFilter, subTypeFilter]);
 
-  const types = useMemo(() => ["all", ...uniqStrings(data.map((d) => d.account_type ?? "Unknown"))], [data]);
+  const types = useMemo(
+    () => ["all", ...uniqStrings(data.map((d) => d.account_type ?? "Unknown"))],
+    [data]
+  );
   const subTypes = useMemo(
-    () => ["all", ...uniqStrings(data.map((d) => d.account_sub_type ?? "Unknown"))],
+    () => [
+      "all",
+      ...uniqStrings(data.map((d) => d.account_sub_type ?? "Unknown")),
+    ],
     [data]
   );
 
@@ -266,12 +309,16 @@ function AccountsTable({
       {
         accessorKey: "name",
         header: ({ column }) => <HeaderSorter label="Name" column={column} />,
-        cell: ({ row }) => <div className="font-medium">{row.original.name ?? "Unnamed"}</div>,
+        cell: ({ row }) => (
+          <div className="font-medium">{row.original.name ?? "Unnamed"}</div>
+        ),
       },
       {
         accessorKey: "account_type",
         header: ({ column }) => <HeaderSorter label="Type" column={column} />,
-        cell: ({ row }) => <Badge variant="outline">{row.original.account_type ?? "Unknown"}</Badge>,
+        cell: ({ row }) => (
+          <Badge variant="outline">{row.original.account_type ?? "Unknown"}</Badge>
+        ),
       },
       {
         accessorKey: "account_sub_type",
@@ -282,7 +329,9 @@ function AccountsTable({
         accessorKey: "current_balance",
         header: ({ column }) => <HeaderSorter label="Balance" column={column} />,
         cell: ({ row }) => (
-          <div className="text-right tabular-nums">{formatINR(row.original.current_balance ?? 0)}</div>
+          <div className="text-right tabular-nums">
+            {formatINR(row.original.current_balance ?? 0)}
+          </div>
         ),
       },
       {
@@ -307,11 +356,23 @@ function AccountsTable({
 
   const exportCSV = () => {
     const rows = table.getRowModel().rows.map((r) => r.original as Account);
-    const header = ["name", "account_type", "account_sub_type", "current_balance", "account_id"];
+    const header = [
+      "name",
+      "account_type",
+      "account_sub_type",
+      "current_balance",
+      "account_id",
+    ];
     const csv = [
       header.join(","),
       ...rows.map((r) =>
-        [r.name ?? "", r.account_type ?? "", r.account_sub_type ?? "", String(r.current_balance ?? 0), r.account_id]
+        [
+          r.name ?? "",
+          r.account_type ?? "",
+          r.account_sub_type ?? "",
+          String(r.current_balance ?? 0),
+          r.account_id,
+        ]
           .map(escapeCsv)
           .join(",")
       ),
@@ -324,7 +385,11 @@ function AccountsTable({
       {/* Toolbar */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex w-full items-center gap-2 md:w-auto">
-          <SearchBox value={globalFilter} onChange={setGlobalFilter} placeholder="Search account name..." />
+          <SearchBox
+            value={globalFilter}
+            onChange={setGlobalFilter}
+            placeholder="Search account name..."
+          />
           <Select value={typeFilter} onValueChange={setTypeFilter}>
             <SelectTrigger className="w-40">
               <SelectValue placeholder="Type" />
@@ -353,11 +418,20 @@ function AccountsTable({
 
         <div className="flex items-center gap-2">
           <ColumnToggle table={table} />
-          <Button variant="outline" size="sm" onClick={exportCSV} disabled={loading || data.length === 0}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={exportCSV}
+            disabled={loading || data.length === 0}
+          >
             <Download className="mr-2 h-4 w-4" /> Export CSV
           </Button>
           <Button size="sm" onClick={onRefresh} disabled={loading}>
-            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+            {loading ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 h-4 w-4" />
+            )}
             Refresh
           </Button>
         </div>
@@ -367,7 +441,12 @@ function AccountsTable({
       <DataTable
         table={table}
         loading={loading}
-        placeholder={<EmptyState title="No accounts to display" hint="Try syncing or adjusting filters." />}
+        placeholder={
+          <EmptyState
+            title="No accounts to display"
+            hint="Try syncing or adjusting filters."
+          />
+        }
       />
     </div>
   );
@@ -384,23 +463,33 @@ function InvoicesTable({
   loading: boolean;
   onRefresh: () => void;
 }) {
-  const [sorting, setSorting] = useState<SortingState>([{ id: "doc_number", desc: false }]);
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: "doc_number", desc: false },
+  ]);
   const [globalFilter, setGlobalFilter] = useState("");
   const [currencyFilter, setCurrencyFilter] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<"all" | "open" | "paid">("all");
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({ invoice_id: false });
+  const [statusFilter, setStatusFilter] = useState<"all" | "open" | "paid">(
+    "all"
+  );
+  const [columnVisibility, setColumnVisibility] =
+    useState<VisibilityState>({ invoice_id: false });
 
   const filteredData = useMemo(() => {
     let d = data;
     if (globalFilter.trim()) {
       const q = globalFilter.toLowerCase();
       d = d.filter(
-        (r) => (r.doc_number ?? "").toLowerCase().includes(q) || (r.customer_name ?? "").toLowerCase().includes(q)
+        (r) =>
+          (r.doc_number ?? "").toLowerCase().includes(q) ||
+          (r.customer_name ?? "").toLowerCase().includes(q)
       );
     }
-    if (currencyFilter !== "all") d = d.filter((r) => (r.currency_code ?? "UNK") === currencyFilter);
-    if (statusFilter === "open") d = d.filter((r) => (r.balance ?? 0) > 0.0001);
-    if (statusFilter === "paid") d = d.filter((r) => (r.balance ?? 0) <= 0.0001);
+    if (currencyFilter !== "all")
+      d = d.filter((r) => (r.currency_code ?? "UNK") === currencyFilter);
+    if (statusFilter === "open")
+      d = d.filter((r) => (r.balance ?? 0) > 0.0001);
+    if (statusFilter === "paid")
+      d = d.filter((r) => (r.balance ?? 0) <= 0.0001);
     return d;
   }, [data, globalFilter, currencyFilter, statusFilter]);
 
@@ -413,12 +502,18 @@ function InvoicesTable({
     () => [
       {
         accessorKey: "doc_number",
-        header: ({ column }) => <HeaderSorter label="Invoice No." column={column} />,
-        cell: ({ row }) => <div className="font-medium">{row.original.doc_number ?? "-"}</div>,
+        header: ({ column }) => (
+          <HeaderSorter label="Invoice No." column={column} />
+        ),
+        cell: ({ row }) => (
+          <div className="font-medium">{row.original.doc_number ?? "-"}</div>
+        ),
       },
       {
         accessorKey: "customer_name",
-        header: ({ column }) => <HeaderSorter label="Customer" column={column} />,
+        header: ({ column }) => (
+          <HeaderSorter label="Customer" column={column} />
+        ),
         cell: ({ row }) => <span>{row.original.customer_name ?? "-"}</span>,
       },
       {
@@ -426,7 +521,10 @@ function InvoicesTable({
         header: ({ column }) => <HeaderSorter label="Total" column={column} />,
         cell: ({ row }) => (
           <div className="tabular-nums">
-            {formatCurrency(row.original.total_amt ?? 0, row.original.currency_code)}
+            {formatCurrency(
+              row.original.total_amt ?? 0,
+              row.original.currency_code
+            )}
           </div>
         ),
       },
@@ -438,8 +536,12 @@ function InvoicesTable({
           const isOpen = bal > 0.0001;
           return (
             <div className="flex items-center gap-2">
-              <div className="tabular-nums">{formatCurrency(bal, row.original.currency_code)}</div>
-              <Badge variant={isOpen ? "destructive" : "secondary"}>{isOpen ? "Open" : "Paid"}</Badge>
+              <div className="tabular-nums">
+                {formatCurrency(bal, row.original.currency_code)}
+              </div>
+              <Badge variant={isOpen ? "destructive" : "secondary"}>
+                {isOpen ? "Open" : "Paid"}
+              </Badge>
             </div>
           );
         },
@@ -476,7 +578,15 @@ function InvoicesTable({
 
   const exportCSV = () => {
     const rows = table.getRowModel().rows.map((r) => r.original as Invoice);
-    const header = ["doc_number", "customer_name", "total_amt", "balance", "status", "currency_code", "invoice_id"];
+    const header = [
+      "doc_number",
+      "customer_name",
+      "total_amt",
+      "balance",
+      "status",
+      "currency_code",
+      "invoice_id",
+    ];
     const csv = [
       header.join(","),
       ...rows.map((r) =>
@@ -501,8 +611,15 @@ function InvoicesTable({
       {/* Toolbar */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex w-full items-center gap-2 md:w-auto">
-          <SearchBox value={globalFilter} onChange={setGlobalFilter} placeholder="Search number, customer..." />
-          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as "all" | "open" | "paid")}>
+          <SearchBox
+            value={globalFilter}
+            onChange={setGlobalFilter}
+            placeholder="Search number, customer..."
+          />
+          <Select
+            value={statusFilter}
+            onValueChange={(v) => setStatusFilter(v as "all" | "open" | "paid")}
+          >
             <SelectTrigger className="w-36">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
@@ -527,12 +644,21 @@ function InvoicesTable({
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={exportCSV} disabled={loading || data.length === 0}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={exportCSV}
+            disabled={loading || data.length === 0}
+          >
             <Download className="mr-2 h-4 w-4" /> Export CSV
           </Button>
           <ColumnToggle table={table} />
           <Button size="sm" onClick={onRefresh} disabled={loading}>
-            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+            {loading ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 h-4 w-4" />
+            )}
             Refresh
           </Button>
         </div>
@@ -542,7 +668,12 @@ function InvoicesTable({
       <DataTable
         table={table}
         loading={loading}
-        placeholder={<EmptyState title="No invoices to display" hint="Try syncing or adjusting filters." />}
+        placeholder={
+          <EmptyState
+            title="No invoices to display"
+            hint="Try syncing or adjusting filters."
+          />
+        }
       />
     </div>
   );
@@ -564,12 +695,25 @@ function Kpi({ title, value, hint }: { title: string; value: string; hint?: stri
   );
 }
 
-function HeaderSorter<TData>({ label, column }: { label: string; column: TanstackColumn<TData, unknown> }) {
+function HeaderSorter<TData>({
+  label,
+  column,
+}: {
+  label: string;
+  column: TanstackColumn<TData, unknown>;
+}) {
   const sorted = column.getIsSorted?.();
   return (
-    <button className="flex items-center gap-1 font-medium" onClick={() => column.toggleSorting(sorted === "asc")}>
+    <button
+      className="flex items-center gap-1 font-medium"
+      onClick={() => column.toggleSorting(sorted === "asc")}
+    >
       {label}
-      {sorted === "asc" ? <ArrowDownAZ className="h-4 w-4" /> : sorted === "desc" ? <ArrowUpAZ className="h-4 w-4" /> : null}
+      {sorted === "asc" ? (
+        <ArrowDownAZ className="h-4 w-4" />
+      ) : sorted === "desc" ? (
+        <ArrowUpAZ className="h-4 w-4" />
+      ) : null}
     </button>
   );
 }
@@ -636,7 +780,12 @@ function SearchBox({
   return (
     <div className="relative w-full md:w-72">
       <Search className="absolute left-2 top-2.5 h-4 w-4 opacity-60" />
-      <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="pl-8" />
+      <Input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="pl-8"
+      />
     </div>
   );
 }
@@ -659,7 +808,9 @@ function DataTable<TData>({
               <TableRow key={hg.id}>
                 {hg.headers.map((h) => (
                   <TableHead key={h.id}>
-                    {h.isPlaceholder ? null : flexRender(h.column.columnDef.header, h.getContext())}
+                    {h.isPlaceholder
+                      ? null
+                      : flexRender(h.column.columnDef.header, h.getContext())}
                   </TableHead>
                 ))}
               </TableRow>
@@ -673,13 +824,20 @@ function DataTable<TData>({
               table.getRowModel().rows.map((row) => (
                 <TableRow key={row.id}>
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
+                    <TableCell key={cell.id}>
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext()
+                      )}
+                    </TableCell>
                   ))}
                 </TableRow>
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={table.getAllLeafColumns().length}>{placeholder}</TableCell>
+                <TableCell colSpan={table.getAllLeafColumns().length}>
+                  {placeholder}
+                </TableCell>
               </TableRow>
             )}
           </TableBody>
@@ -689,10 +847,14 @@ function DataTable<TData>({
       {/* Pagination */}
       <div className="flex flex-col items-center justify-between gap-3 sm:flex-row">
         <div className="text-sm text-muted-foreground">
-          {table.getRowModel().rows.length} result{table.getRowModel().rows.length === 1 ? "" : "s"}
+          {table.getRowModel().rows.length} result
+          {table.getRowModel().rows.length === 1 ? "" : "s"}
         </div>
         <div className="flex items-center gap-2">
-          <Select value={String(table.getState().pagination.pageSize)} onValueChange={(v) => table.setPageSize(Number(v))}>
+          <Select
+            value={String(table.getState().pagination.pageSize)}
+            onValueChange={(v) => table.setPageSize(Number(v))}
+          >
             <SelectTrigger className="w-28">
               <SelectValue placeholder="Rows per page" />
             </SelectTrigger>
@@ -706,13 +868,24 @@ function DataTable<TData>({
           </Select>
 
           <div className="flex items-center gap-1">
-            <Button variant="outline" size="sm" onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => table.previousPage()}
+              disabled={!table.getCanPreviousPage()}
+            >
               Prev
             </Button>
             <span className="px-2 text-sm">
-              Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount() || 1}
+              Page {table.getState().pagination.pageIndex + 1} of{" "}
+              {table.getPageCount() || 1}
             </span>
-            <Button variant="outline" size="sm" onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => table.nextPage()}
+              disabled={!table.getCanNextPage()}
+            >
               Next
             </Button>
           </div>
@@ -758,7 +931,9 @@ function sanitizeAccount(a: Account): Account {
     account_type: a.account_type ?? null,
     account_sub_type: a.account_sub_type ?? null,
     current_balance:
-      typeof a.current_balance === "number" ? a.current_balance : Number(a.current_balance ?? 0),
+      typeof a.current_balance === "number"
+        ? a.current_balance
+        : Number(a.current_balance ?? 0),
   };
 }
 
@@ -769,7 +944,8 @@ function sanitizeInvoice(i: Invoice): Invoice {
     customer_name: i.customer_name ?? null,
     status: i.status ?? null,
     currency_code: i.currency_code ?? null,
-    total_amt: typeof i.total_amt === "number" ? i.total_amt : Number(i.total_amt ?? 0),
+    total_amt:
+      typeof i.total_amt === "number" ? i.total_amt : Number(i.total_amt ?? 0),
     balance: typeof i.balance === "number" ? i.balance : Number(i.balance ?? 0),
   };
 }
@@ -791,9 +967,16 @@ function formatINR(n: number) {
 }
 
 function formatCurrency(n: number, code?: string | null) {
-  if (!code) return new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 }).format(n);
+  if (!code)
+    return new Intl.NumberFormat("en-IN", {
+      maximumFractionDigits: 2,
+    }).format(n);
   try {
-    return new Intl.NumberFormat("en-IN", { style: "currency", currency: code, maximumFractionDigits: 2 }).format(n);
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: code,
+      maximumFractionDigits: 2,
+    }).format(n);
   } catch {
     return `${n.toFixed(2)} ${code}`;
   }

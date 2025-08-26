@@ -74,7 +74,9 @@ export function SettingsSidebar({
                 )}
                 <item.icon className="h-4 w-4 opacity-70" />
                 <span className="flex-1">{item.label}</span>
-                {item.external ? <ExternalLink className="h-4 w-4 opacity-60" /> : null}
+                {item.external ? (
+                  <ExternalLink className="h-4 w-4 opacity-60" />
+                ) : null}
               </button>
             );
           })}
