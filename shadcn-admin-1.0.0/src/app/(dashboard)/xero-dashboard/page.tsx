@@ -93,7 +93,6 @@ export default function XeroAnalyticsPage() {
     const load = async () => {
       setLoading(true);
 
-      // Pull everything we need in two efficient selects
       const [invRes, cRes] = await Promise.all([
         supabase
           .from("xero_invoices")
@@ -111,7 +110,6 @@ export default function XeroAnalyticsPage() {
       setInvoices(inv);
       setContacts(cons);
 
-      // Build summary quickly from the fetched rows
       const openStatuses = new Set(["AUTHORISED", "SUBMITTED", "DRAFT"]);
       const now = Date.now();
 
@@ -146,6 +144,12 @@ export default function XeroAnalyticsPage() {
   }, []);
 
   /* ---------------- live refresh button ---------------- */
+  const drawAllRef = useRef<() => void>(() => {});
+  // keep ref always pointing to the newest drawAll
+  useEffect(() => {
+    drawAllRef.current = drawAll;
+  });
+
   const refresh = async () => {
     setLoading(true);
     const [invRes, cRes] = await Promise.all([
@@ -154,7 +158,9 @@ export default function XeroAnalyticsPage() {
         .select(
           "invoice_id,contact_name,status,currency_code,amount_due,total,issued_at,due_at"
         ),
-      supabase.from("xero_contacts").select("contact_id,is_customer,is_supplier,email"),
+      supabase
+        .from("xero_contacts")
+        .select("contact_id,is_customer,is_supplier,email"),
     ]);
 
     const inv = (invRes.data ?? []) as InvoiceRow[];
@@ -188,16 +194,13 @@ export default function XeroAnalyticsPage() {
       outstandingTotal,
     });
     setLoading(false);
-    drawAll(); // redraw with fresh data
+    drawAllRef.current(); // ✅ no missing-deps warning
   };
 
   /* ---------------- derived aggregations ---------------- */
-
-  // last 12 months labels (YYYY-MM)
   const months = useMemo(() => {
     const L: string[] = [];
     const base = new Date();
-    // use UTC first-of-month for stability
     base.setUTCDate(1);
     for (let i = 11; i >= 0; i--) {
       const d = new Date(
@@ -210,7 +213,6 @@ export default function XeroAnalyticsPage() {
     return L;
   }, []);
 
-  // invoices per month
   const monthlyCounts = useMemo(() => {
     const m = new Map<string, number>();
     months.forEach((key) => m.set(key, 0));
@@ -221,7 +223,6 @@ export default function XeroAnalyticsPage() {
     return months.map((k) => m.get(k) ?? 0);
   }, [invoices, months]);
 
-  // status distribution (all time in current dataset)
   const statusDist = useMemo(() => {
     const map = new Map<string, number>();
     invoices.forEach((r) => {
@@ -232,12 +233,10 @@ export default function XeroAnalyticsPage() {
       name,
       value,
     }));
-    // sort by value desc
     arr.sort((a, b) => b.value - a.value);
     return arr;
   }, [invoices]);
 
-  // AR aging buckets by outstanding (amount_due)
   const agingBuckets = useMemo(() => {
     const buckets = { Current: 0, "1–30": 0, "31–60": 0, "61–90": 0, "90+": 0 };
     const now = Date.now();
@@ -259,7 +258,6 @@ export default function XeroAnalyticsPage() {
     return { labels, values };
   }, [invoices]);
 
-  // Top 10 customers by outstanding
   const topCustomers = useMemo(() => {
     const map = new Map<string, number>();
     invoices.forEach((r) => {
@@ -275,7 +273,6 @@ export default function XeroAnalyticsPage() {
     return arr.slice(0, 10);
   }, [invoices]);
 
-  // Currency totals (by total amount)
   const currencyTotals = useMemo(() => {
     const map = new Map<string, number>();
     invoices.forEach((r) => {
@@ -291,7 +288,6 @@ export default function XeroAnalyticsPage() {
     return arr;
   }, [invoices]);
 
-  // Contacts: type breakdown + email coverage
   const contactSplit = useMemo(() => {
     let customer = 0,
       supplier = 0,
@@ -323,7 +319,7 @@ export default function XeroAnalyticsPage() {
     ];
   }, [contacts]);
 
-  /* ── keys for effect deps (avoid complex expressions in arrays) ── */
+  /* ── keys for effect deps ── */
   const agingLabelsKey = useMemo(
     () => agingBuckets.labels.join("|"),
     [agingBuckets.labels]
@@ -350,12 +346,6 @@ export default function XeroAnalyticsPage() {
   );
 
   /* ---------------- ECharts lifecycle & drawing ---------------- */
-
-  // keep a ref to drawAll so mount effect doesn't depend on it
-  const drawAllRef = useRef<() => void>(() => {});
-  useEffect(() => {
-    drawAllRef.current = drawAll;
-  });
 
   useEffect(() => {
     const onResize = () => {
@@ -392,8 +382,9 @@ export default function XeroAnalyticsPage() {
     };
   }, []);
 
+  // Redraw charts whenever inputs change – use the ref to avoid missing-deps warning
   useEffect(() => {
-    drawAll();
+    drawAllRef.current();
   }, [
     echartsReady,
     isDark,
@@ -850,7 +841,6 @@ function formatMoney(n: number, currency = "INR") {
   }
 }
 function shortMoney(n: number) {
-  // 12.3K / 4.5M style
   const abs = Math.abs(n);
   if (abs >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
   if (abs >= 1e6) return `${(n / 1e6).toFixed(1)}M`;

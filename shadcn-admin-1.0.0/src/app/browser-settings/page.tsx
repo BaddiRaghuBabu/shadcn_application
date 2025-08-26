@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { RightSidebar } from "./components/right-sidebar";
-import { SettingsSidebar } from "./components/sidebar";
+import SettingsSidebar from "./components/sidebar";
 
 export default function BrowserSettingsLikeEdge() {
   const [activeLabel, setActiveLabel] = useState("Profiles");
